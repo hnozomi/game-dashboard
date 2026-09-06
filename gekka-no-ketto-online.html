@@ -168,7 +168,7 @@
   </div>
   <button class="big-btn" id="hostBtn">部屋を作る</button>
   <button class="sub-btn" id="joinModeBtn">コードで部屋に入る</button>
-  <div class="note">※ 対戦相手もこの作品を開ける必要があります(共有リンクを送ってください)。対戦データは共有ストレージに保存されるため、この作品を開いた他の人から見える可能性があります。本名などは使いません。</div>
+  <div class="note">※ 対戦相手もこの作品を開ける必要があります(共有リンクを送ってください)。通信は無料の中継サービス(PeerJS)を介して2人の端末を直接つなぎます。名前の入力などは不要です。</div>
   <p style="font-size:12.5px; opacity:.7; margin-top:8px;" id="titleTally"></p>
 </div>
 
@@ -221,6 +221,7 @@
 </div>
 
 <script src="ranking.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
 <script>
 (() => {
   const GAME_KEY = 'gekka-no-ketto';
@@ -239,22 +240,15 @@
 
   const WIN_SCORE = 3;
   const FEINTS = ['……風が、ないた', '……葉が、落ちた', '……鳥が、たった', '……雲が、月をかすめた', '……虫の音が、やんだ'];
-  const POLL_MS = 2200;
+  const PEER_ID_PREFIX = 'gekka-tsuki-';
+  const JOIN_TIMEOUT_MS = 10000;
 
-  // ---- ストレージ ----
-  const hasStorage = typeof window.storage?.get === 'function';
-  async function stGet(key) {
-    try { const r = await window.storage.get(key, true); return r ? JSON.parse(r.value) : null; }
-    catch { return null; }
-  }
-  async function stSet(key, obj) {
-    try { await window.storage.set(key, JSON.stringify(obj), true); return true; }
-    catch { return false; }
-  }
+  // ---- 通信 (PeerJS 経由の WebRTC 直結) ----
+  const hasPeer = typeof Peer === 'function' && typeof RTCPeerConnection === 'function';
 
-  if (!hasStorage) {
+  if (!hasPeer) {
     document.querySelector('#titleScreen .note').textContent =
-      '⚠️ この環境では共有ストレージが使えないため、通信対戦ができません。Claudeのアーティファクトとして開いてください。';
+      '⚠️ この環境では通信対戦の準備ができませんでした(WebRTCが使えないか、通信ライブラリの読み込みに失敗しました)。通信環境を確認して再読み込みしてください。';
     $('hostBtn').disabled = true;
     $('joinModeBtn').disabled = true;
   }
@@ -296,78 +290,119 @@
   let myResults = {};       // {'m1:r1': {ms} or {foul:true} or {miss:true}}
   let foeResults = {};
   let myRematch = 1, foeRematch = 1;
-  let pollTimer = null;
   let phase = 'idle';       // idle / armed / signal / submitted / reveal / done
   let tallyRecordedForMatch = -1;
   let armTimers = [];
   let signalAt = 0;
   let revealShownFor = null;
+  let peer = null;
+  let conn = null;
 
-  const myKey = () => `gekkaduel:${roomCode}:${role}`;
-  const foeKey = () => `gekkaduel:${roomCode}:${role === 'p1' ? 'p2' : 'p1'}`;
-  const metaKey = () => `gekkaduel:${roomCode}:meta`;
+  function makePeerId(code) { return PEER_ID_PREFIX + code; }
 
-  async function saveMine() {
-    await stSet(myKey(), { joined: true, results: myResults, rematch: myRematch, at: Date.now() });
+  function sendMine() {
+    if (conn && conn.open) conn.send({ type: 'state', results: myResults, rematch: myRematch });
+  }
+
+  function setupConnection() {
+    conn.on('data', (data) => {
+      if (!data) return;
+      if (data.type === 'hello') {
+        seed = data.seed;
+        myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
+        enterDuel();
+      } else if (data.type === 'state') {
+        foeResults = data.results || {};
+        foeRematch = data.rematch || 1;
+        onStateUpdate();
+      }
+    });
+    conn.on('close', () => {
+      if (roomCode) {
+        alert('相手との接続が切れました。');
+        resetToTitle();
+      }
+    });
+  }
+
+  function resetToTitle() {
+    roomCode = null;
+    if (conn) { try { conn.close(); } catch (e) {} conn = null; }
+    if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+    show('titleScreen');
   }
 
   // ---- タイトル ----
-  $('hostBtn').addEventListener('click', async () => {
-    role = 'p1';
-    // 空きコードを探す
-    for (let i = 0; i < 6; i++) {
-      const code = String(Math.floor(1000 + Math.random() * 9000));
-      const meta = await stGet(`gekkaduel:${code}:meta`);
-      if (!meta || Date.now() - meta.at > 2 * 3600 * 1000) { roomCode = code; break; }
-    }
-    if (!roomCode) { alert('部屋を作れませんでした。もう一度お試しください。'); return; }
-    seed = String(Math.floor(Math.random() * 1e9));
-    myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
-    await stSet(metaKey(), { seed, at: Date.now() });
-    await saveMine();
-    $('roomCodeDisplay').textContent = roomCode;
-    show('hostScreen');
-    startPolling();
-  });
+  function hostRoom(attempt) {
+    attempt = attempt || 0;
+    if (attempt >= 6) { alert('部屋を作れませんでした。もう一度お試しください。'); resetToTitle(); return; }
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const p = new Peer(makePeerId(code));
+    peer = p;
+    p.on('open', () => {
+      role = 'p1';
+      roomCode = code;
+      seed = String(Math.floor(Math.random() * 1e9));
+      myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
+      $('roomCodeDisplay').textContent = roomCode;
+      show('hostScreen');
+    });
+    p.on('connection', (c) => {
+      conn = c;
+      setupConnection();
+      conn.on('open', () => {
+        conn.send({ type: 'hello', seed });
+        enterDuel();
+      });
+    });
+    p.on('error', (err) => {
+      if (err.type === 'unavailable-id') {
+        p.destroy();
+        hostRoom(attempt + 1);
+      } else if (!roomCode) {
+        alert('部屋を作れませんでした(' + err.type + ')。もう一度お試しください。');
+        resetToTitle();
+      }
+    });
+  }
+
+  $('hostBtn').addEventListener('click', () => hostRoom());
 
   $('joinModeBtn').addEventListener('click', () => { $('joinErr').textContent = ''; show('joinScreen'); });
   $('joinCancelBtn').addEventListener('click', () => show('titleScreen'));
-  $('hostCancelBtn').addEventListener('click', () => { stopPolling(); roomCode = null; show('titleScreen'); });
+  $('hostCancelBtn').addEventListener('click', () => resetToTitle());
 
-  $('joinBtn').addEventListener('click', async () => {
+  $('joinBtn').addEventListener('click', () => {
     const code = $('codeInput').value.trim();
     if (!/^\d{4}$/.test(code)) { $('joinErr').textContent = '4桁の数字を入れてください'; return; }
     $('joinErr').textContent = '部屋をさがしている……';
-    const meta = await stGet(`gekkaduel:${code}:meta`);
-    if (!meta) { $('joinErr').textContent = 'その部屋は見つからなかった'; return; }
     role = 'p2';
     roomCode = code;
-    seed = meta.seed;
-    myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
-    await saveMine();
-    enterDuel();
-    startPolling();
+    const p = new Peer();
+    peer = p;
+    let settled = false;
+    const giveUp = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      $('joinErr').textContent = 'その部屋は見つからなかった';
+      roomCode = null;
+      try { p.destroy(); } catch (e) {}
+      peer = null;
+    }, JOIN_TIMEOUT_MS);
+    p.on('open', () => {
+      const c = p.connect(makePeerId(code), { reliable: true });
+      conn = c;
+      setupConnection();
+      conn.on('open', () => { settled = true; clearTimeout(giveUp); });
+    });
+    p.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(giveUp);
+      $('joinErr').textContent = 'その部屋は見つからなかった';
+      roomCode = null;
+    });
   });
-
-  // ---- ポーリング ----
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(poll, POLL_MS);
-    poll();
-  }
-  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
-
-  async function poll() {
-    if (!roomCode) return;
-    const foe = await stGet(foeKey());
-    if (!foe) return;
-    foeResults = foe.results || {};
-    foeRematch = foe.rematch || 1;
-
-    // ホスト:相手が来たら開戦
-    if ($('hostScreen').classList.contains('on') && foe.joined) enterDuel();
-    onStateUpdate();
-  }
 
   // ---- 進行ロジック(両端末で決定的に同じ計算)----
   function rk(r) { return `m${match}:r${r}`; }
@@ -507,12 +542,12 @@
     }
   });
 
-  async function submitResult(res) {
+  function submitResult(res) {
     const st = computeMatch();
     myResults[rk(st.nextRound)] = res;
     phase = 'submitted';
-    await saveMine();
-    poll();
+    sendMine();
+    onStateUpdate();
   }
 
   function onStateUpdate() {
@@ -604,19 +639,15 @@
     show('endScreen');
   }
 
-  $('rematchBtn').addEventListener('click', async () => {
+  $('rematchBtn').addEventListener('click', () => {
     myRematch = match + 1;
     $('rematchBtn').disabled = true;
     $('rematchStatus').textContent = '相手の返事を待っている……(相手も再戦を押すと開始)';
-    await saveMine();
-    poll();
+    sendMine();
+    onStateUpdate();
   });
 
-  $('exitBtn').addEventListener('click', () => {
-    stopPolling();
-    roomCode = null;
-    show('titleScreen');
-  });
+  $('exitBtn').addEventListener('click', () => resetToTitle());
 })();
 </script>
 </body>
