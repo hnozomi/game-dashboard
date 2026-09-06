@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>星をつなぐ 〜賢者の夜〜</title>
+<style>
+  :root {
+    --sky: #0c1030;
+    --gold: #ffe9b0;
+    --dim: #7f8bc9;
+    --mist: #9db8ff;
+    --ink: #eef0fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: var(--sky);
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; }
+
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 18px; pointer-events: none;
+  }
+  .level { font-size: 15px; opacity: .85; letter-spacing: .1em; }
+  .level b { font-size: 34px; font-weight: 700; display: block; line-height: 1.1; }
+  .right { text-align: right; }
+  .best { font-size: 12px; opacity: .65; margin-bottom: 4px; }
+  .progress { font-size: 14px; color: var(--gold); }
+
+  .toolbar {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px;
+  }
+  .toolbar button {
+    font: inherit; font-size: 14px; font-weight: 700;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: 9px 22px; cursor: pointer;
+  }
+  .toolbar button:active { background: rgba(255,255,255,.16); }
+  .toolbar button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  .rank-btn {
+    pointer-events: auto;
+    font: inherit; font-size: 11px; font-weight: 700;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 4px 14px; margin-top: 6px; cursor: pointer;
+  }
+  .rank-btn:active { background: rgba(255,255,255,.18); }
+
+  .overlay {
+    position: fixed; inset: 0; overflow-y: auto;
+    display: flex; flex-column: column; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 14px; text-align: center; padding: 24px;
+    background: rgba(8, 10, 28, .74);
+    backdrop-filter: blur(3px);
+    transition: opacity .4s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay h1 { font-size: 36px; letter-spacing: .2em; font-weight: 700; text-shadow: 0 0 26px rgba(255,233,176,.35); }
+  .overlay h1 small { display: block; font-size: 15px; letter-spacing: .35em; opacity: .8; margin-top: 8px; }
+  .rules { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; line-height: 1.7; max-width: 27em; }
+  .rules div { background: rgba(255,233,176,.06); border: 1px solid rgba(255,233,176,.14); border-radius: 10px; padding: 9px 14px; }
+  .rules b { color: var(--gold); }
+  .rules .mist-b { color: var(--mist); }
+  .overlay .big-btn {
+    font: inherit; font-size: 16px; font-weight: 700;
+    color: #2a2210; background: var(--gold);
+    border: none; border-radius: 999px;
+    padding: 13px 44px; margin-top: 6px; cursor: pointer;
+    box-shadow: 0 0 24px rgba(255, 233, 176, .4);
+  }
+  .overlay .big-btn:active { transform: translateY(2px); }
+  .overlay .big-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .hint { font-size: 12px; opacity: .55; }
+
+  .constellation-name {
+    position: fixed; top: 32%; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 700; letter-spacing: .18em;
+    color: var(--gold); text-shadow: 0 0 20px rgba(255,233,176,.6);
+    pointer-events: none; white-space: nowrap;
+    opacity: 0; animation: nameFade 2.2s ease forwards;
+    text-align: center;
+  }
+  .constellation-name small {
+    display: block; font-size: 13px; font-weight: 400;
+    letter-spacing: .3em; opacity: .8; margin-top: 6px; color: var(--ink);
+  }
+  @keyframes nameFade {
+    0% { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .deny-msg {
+    position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #ffb8c4; text-shadow: 0 0 12px rgba(255,120,150,.4);
+    pointer-events: none; white-space: nowrap;
+    opacity: 0; animation: denyFade 1.6s ease forwards;
+  }
+  @keyframes denyFade {
+    0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .overlay { transition: none; }
+    .constellation-name, .deny-msg { animation-duration: 1.2s; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;bottom:14px;left:14px;z-index:99999;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;background:rgba(11,15,28,0.72);border:1px solid rgba(246,201,119,0.35);color:#f6c877;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:12.5px;letter-spacing:0.04em;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,0.35);">← 遊戯場へ戻る</a>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="level">だい <b id="level">1</b> 夜</div>
+  <div class="right">
+    <div class="best">さいこう <span id="best">1</span> 夜</div>
+    <div class="progress"><span id="lit">0</span> / <span id="total">0</span> ★</div>
+    <button class="rank-btn" id="rankBtn">きろく</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <button id="undoBtn">ひとつもどる</button>
+  <button id="resetBtn">かきなおす</button>
+</div>
+
+<div class="overlay hidden" id="rankOverlay">
+  <h1 style="font-size:26px;">よぞらの<small>きろく</small></h1>
+  <div id="rankBox"></div>
+  <button class="big-btn" id="rankCloseBtn">とじる</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h1>星をつなぐ<small>― 賢者の夜 ―</small></h1>
+  <div class="rank-side-layout">
+    <div class="rank-side-left">
+      <div class="rules">
+        <div>✍️ <b>すべての星</b>を一筆書きでつなぐ。進めるのは となり(上下左右)だけ。</div>
+        <div>🔢 数字の星は <b>1 → 2 → 3 の順</b>にしか通れない。</div>
+        <div>🏁 いちばん大きな数字は <b>旅の終着点</b>。すべての星をつないだ最後の一歩でしか入れない。</div>
+        <div>🌫 <b class="mist-b">星のもや</b>(青い霞)がかかった隙間は通り抜けられない。</div>
+        <div>🤔 なぞる前に、まず眺めて考えるべし。答えは必ずひとつ以上ある。</div>
+      </div>
+      <button class="big-btn" id="startBtn">よぞらへ</button>
+      <div class="hint">なぞり戻し・途中タップで描き直しもできる</div>
+    </div>
+    <div class="rank-side-right">
+      <div id="startRankBox"></div>
+    </div>
+  </div>
+</div>
+
+<script src="ranking.js"></script>
+<script>
+(() => {
+  const GAME_KEY = 'hoshi-wo-tsunagu-kenja';
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const levelEl = document.getElementById('level');
+  const bestEl = document.getElementById('best');
+  const litEl = document.getElementById('lit');
+  const totalEl = document.getElementById('total');
+  const startOverlay = document.getElementById('startOverlay');
+  const rankOverlay = document.getElementById('rankOverlay');
+
+  let W, H, dpr;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (puzzle) layoutPuzzle();
+  }
+  window.addEventListener('resize', resize);
+
+
+  // ---- レベル定義: [cols, rows, holes, numbers, walls] ----
+  function levelSpec(i) {
+    const table = [
+      [3, 3, 0, 2, 0],
+      [4, 3, 0, 3, 1],
+      [4, 4, 0, 3, 2],
+      [5, 4, 0, 4, 3],
+      [5, 4, 1, 4, 4],
+      [5, 5, 1, 4, 5],
+      [6, 5, 2, 5, 6],
+      [6, 5, 2, 5, 7],
+      [6, 6, 3, 6, 8],
+      [6, 6, 3, 6, 9],
+    ];
+    if (i < table.length) return table[i];
+    const cols = 5 + Math.floor(Math.random() * 3);
+    const rows = 5 + Math.floor(Math.random() * 3);
+    const holes = 2 + Math.floor(Math.random() * 4);
+    const numbers = 4 + Math.floor(Math.random() * 3);
+    const walls = 5 + Math.floor(Math.random() * 6);
+    return [cols, rows, holes, numbers, walls];
+  }
+
+  // ---- 生成ユーティリティ ----
+  function neighborsOf(key, set) {
+    const [cx, cy] = key.split(',').map(Number);
+    return [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]
+      .map(([a, b]) => `${a},${b}`)
+      .filter(k => set.has(k));
+  }
+
+  function isConnected(set) {
+    if (set.size === 0) return false;
+    const start = set.values().next().value;
+    const seen = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const k = q.pop();
+      for (const n of neighborsOf(k, set)) {
+        if (!seen.has(n)) { seen.add(n); q.push(n); }
+      }
+    }
+    return seen.size === set.size;
+  }
+
+  function findHamPath(set) {
+    const cells = [...set];
+    for (let tries = 0; tries < 60; tries++) {
+      const start = cells[Math.floor(Math.random() * cells.length)];
+      const used = new Set([start]);
+      const path = [start];
+      while (path.length < set.size) {
+        const cur = path[path.length - 1];
+        const opts = neighborsOf(cur, set).filter(k => !used.has(k));
+        if (!opts.length) break;
+        let bestScore = Infinity, pool = [];
+        for (const o of opts) {
+          const s = neighborsOf(o, set).filter(k => !used.has(k) && k !== cur).length;
+          if (s < bestScore) { bestScore = s; pool = [o]; }
+          else if (s === bestScore) pool.push(o);
+        }
+        const next = pool[Math.floor(Math.random() * pool.length)];
+        used.add(next);
+        path.push(next);
+      }
+      if (path.length === set.size) return path;
+    }
+    return null;
+  }
+
+  function wallKey(a, b) { return [a, b].sort().join('|'); }
+
+  function genPuzzle(cols, rows, holes, numCount, wallCount) {
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const all = [];
+      for (let cy = 0; cy < rows; cy++)
+        for (let cx = 0; cx < cols; cx++) all.push(`${cx},${cy}`);
+      const set = new Set(all);
+      const h = attempt > 250 ? Math.max(0, holes - 1) : holes;
+      const shuffled = all.slice().sort(() => Math.random() - .5);
+      let removed = 0;
+      for (const key of shuffled) {
+        if (removed >= h) break;
+        set.delete(key);
+        if (isConnected(set)) removed++;
+        else set.add(key);
+      }
+      const path = findHamPath(set);
+      if (!path) continue;
+
+      // --- 数字星:解の経路上に順番に配置(必ず解ける)---
+      const n = Math.min(numCount, path.length);
+      const numbered = new Map(); // key -> 番号
+      numbered.set(path[0], 1);
+      numbered.set(path[path.length - 1], n);
+      if (n > 2) {
+        // 中間チェックポイントを等間隔+ゆらぎで
+        const idxs = [];
+        for (let i = 1; i < n - 1; i++) {
+          const base = Math.round((path.length - 1) * i / (n - 1));
+          idxs.push(base);
+        }
+        // 重複回避しつつ登録
+        let num = 2;
+        const usedIdx = new Set([0, path.length - 1]);
+        for (const base of idxs) {
+          let idx = base;
+          let d = 0;
+          while (usedIdx.has(idx)) { d++; idx = base + (d % 2 ? d : -d); }
+          usedIdx.add(idx);
+          numbered.set(path[idx], num++);
+        }
+      }
+
+      // --- 星のもや(壁):解の経路で使っていない隣接ペアから選ぶ ---
+      const pathEdges = new Set();
+      for (let i = 0; i < path.length - 1; i++) pathEdges.add(wallKey(path[i], path[i + 1]));
+      const candidates = [];
+      for (const key of set) {
+        for (const nb of neighborsOf(key, set)) {
+          const wk = wallKey(key, nb);
+          if (!pathEdges.has(wk)) candidates.push(wk);
+        }
+      }
+      const uniq = [...new Set(candidates)].sort(() => Math.random() - .5);
+      const walls = new Set(uniq.slice(0, wallCount));
+
+      return { keys: set, numbered, walls, maxNum: n, solution: path };
+    }
+    // 保険:蛇行パス
+    const set = new Set(); const path = [];
+    for (let cy = 0; cy < rows; cy++) {
+      const xs = [...Array(cols).keys()];
+      if (cy % 2) xs.reverse();
+      for (const cx of xs) { const k = `${cx},${cy}`; set.add(k); path.push(k); }
+    }
+    const numbered = new Map([[path[0], 1], [path[path.length - 1], 2]]);
+    return { keys: set, numbered, walls: new Set(), maxNum: 2, solution: path };
+  }
+
+  // ---- 状態 ----
+  let puzzle = null, cellPx = 60, originX = 0, originY = 0;
+  let path = [], drawing = false, level, best, playing, celebrating = 0;
+  let denyFlash = null; // {key, t}
+  let lastDenyAt = 0;
+
+  best = Ranking.getBest(GAME_KEY, 1);
+  bestEl.textContent = best;
+  Ranking.mount('startRankBox', GAME_KEY, { unit: ' 夜' });
+
+  document.getElementById('rankBtn').addEventListener('click', () => {
+    Ranking.mount('rankBox', GAME_KEY, { unit: ' 夜' });
+    rankOverlay.classList.remove('hidden');
+  });
+  document.getElementById('rankCloseBtn').addEventListener('click', () => {
+    rankOverlay.classList.add('hidden');
+  });
+
+  function layoutPuzzle() {
+    const cols = puzzle.cols, rows = puzzle.rows;
+    cellPx = Math.min((W * 0.82) / Math.max(1, cols - 1 || 1), (H * 0.52) / Math.max(1, rows - 1 || 1), 96);
+    const gw = (cols - 1) * cellPx, gh = (rows - 1) * cellPx;
+    originX = (W - gw) / 2;
+    originY = (H - gh) / 2 + H * 0.02;
+    for (const c of puzzle.cells.values()) {
+      c.x = originX + c.cx * cellPx;
+      c.y = originY + c.cy * cellPx;
+    }
+  }
+
+  function loadLevel(i) {
+    const [cols, rows, holes, nums, walls] = levelSpec(i);
+    const gen = genPuzzle(cols, rows, holes, nums, walls);
+    const cells = new Map();
+    let maxX = 0, maxY = 0;
+    for (const key of gen.keys) {
+      const [cx, cy] = key.split(',').map(Number);
+      maxX = Math.max(maxX, cx); maxY = Math.max(maxY, cy);
+      cells.set(key, { key, cx, cy, x: 0, y: 0, tw: Math.random() * Math.PI * 2 });
+    }
+    puzzle = {
+      cells, cols: maxX + 1, rows: maxY + 1,
+      numbered: gen.numbered, walls: gen.walls, maxNum: gen.maxNum,
+    };
+    path = [];
+    celebrating = 0;
+    denyFlash = null;
+    layoutPuzzle();
+    levelEl.textContent = i + 1;
+    totalEl.textContent = cells.size;
+    litEl.textContent = '0';
+  }
+
+  function cellAt(px, py) {
+    for (const c of puzzle.cells.values()) {
+      if (Math.hypot(px - c.x, py - c.y) < Math.min(34, cellPx * 0.42)) return c;
+    }
+    return null;
+  }
+
+  function isAdjacent(a, b) {
+    return Math.abs(a.cx - b.cx) + Math.abs(a.cy - b.cy) === 1;
+  }
+
+  function blockedByWall(a, b) {
+    return puzzle.walls.has(wallKey(a.key, b.key));
+  }
+
+  function nextExpectedNumber() {
+    let count = 0;
+    for (const k of path) if (puzzle.numbered.has(k)) count++;
+    return count + 1;
+  }
+
+  function deny(cell, msg) {
+    denyFlash = { key: cell ? cell.key : null, t: 1 };
+    const now = performance.now();
+    if (now - lastDenyAt > 900) {
+      lastDenyAt = now;
+      const el = document.createElement('div');
+      el.className = 'deny-msg';
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1700);
+    }
+  }
+
+  // 進入判定(理由つき)
+  function tryEnter(cell) {
+    const num = puzzle.numbered.get(cell.key);
+    if (num !== undefined) {
+      const expected = nextExpectedNumber();
+      if (num === puzzle.maxNum) {
+        const isFinalStep = (path.length + 1 === puzzle.cells.size) && (num === expected);
+        if (!isFinalStep) {
+          deny(cell, num === expected ? 'おわりの星は…すべてをつないだ最後に' : 'まだ その星のじゅんばんではない');
+          return false;
+        }
+      } else if (num !== expected) {
+        deny(cell, num < expected ? 'その星はもう通った' : `つぎは ${expected} の星`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function pushCell(cell) {
+    path.push(cell.key);
+    updateProgress();
+    if (path.length === puzzle.cells.size) complete();
+  }
+
+  function updateProgress() {
+    litEl.textContent = path.length;
+  }
+
+  const ADJ = ['ねむる', 'かんがえる', 'ささやく', 'まいごの', 'かしこい', 'ひらめく', '旅する', 'とんちの', '夢みる', 'なぞめく', 'しずかな', '月よみの'];
+  const ANIMAL = ['ネコ', 'クジラ', 'キツネ', 'ウサギ', 'フクロウ', 'リュウ', 'カメ', 'ペンギン', 'クマ', 'チョウ', 'オオカミ', 'ヘビつかい'];
+
+  function complete() {
+    celebrating = 1;
+    const name = ADJ[Math.floor(Math.random() * ADJ.length)] + ANIMAL[Math.floor(Math.random() * ANIMAL.length)] + '座';
+    const el = document.createElement('div');
+    el.className = 'constellation-name';
+    el.appendChild(document.createTextNode(name));
+    const small = document.createElement('small');
+    small.textContent = 'みごとな推理。あたらしい星座が生まれた';
+    el.appendChild(small);
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2300);
+
+    setTimeout(() => {
+      level++;
+      if (level + 1 > best) {
+        const result = Ranking.record(GAME_KEY, level + 1);
+        best = result.best;
+        bestEl.textContent = best;
+      }
+      loadLevel(level);
+    }, 2100);
+  }
+
+  // ---- 入力 ----
+  canvas.addEventListener('pointerdown', e => {
+    if (!playing || celebrating) return;
+    const c = cellAt(e.clientX, e.clientY);
+    if (!c) return;
+    const idx = path.indexOf(c.key);
+    if (idx >= 0) {
+      path = path.slice(0, idx + 1);
+      drawing = true;
+      updateProgress();
+      return;
+    }
+    if (path.length === 0) {
+      if (puzzle.numbered.get(c.key) === 1) {
+        path = [c.key];
+        drawing = true;
+        updateProgress();
+      } else {
+        deny(c, '旅は 1 の星からはじまる');
+      }
+      return;
+    }
+    const last = puzzle.cells.get(path[path.length - 1]);
+    if (isAdjacent(last, c) && !blockedByWall(last, c) && !path.includes(c.key)) {
+      if (tryEnter(c)) { drawing = true; pushCell(c); }
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!playing || !drawing || celebrating) return;
+    const c = cellAt(e.clientX, e.clientY);
+    if (!c || path.length === 0) return;
+    const lastKey = path[path.length - 1];
+    if (c.key === lastKey) return;
+    if (path.length >= 2 && c.key === path[path.length - 2]) {
+      path.pop();
+      updateProgress();
+      return;
+    }
+    const last = puzzle.cells.get(lastKey);
+    if (!isAdjacent(last, c) || path.includes(c.key)) return;
+    if (blockedByWall(last, c)) { deny(null, 'もやの向こうへは いけない'); return; }
+    if (tryEnter(c)) pushCell(c);
+  });
+
+  window.addEventListener('pointerup', () => { drawing = false; });
+  window.addEventListener('pointercancel', () => { drawing = false; });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (celebrating) return;
+    path = [];
+    updateProgress();
+  });
+  document.getElementById('undoBtn').addEventListener('click', () => {
+    if (celebrating || path.length === 0) return;
+    path.pop();
+    updateProgress();
+  });
+
+  document.getElementById('startBtn').addEventListener('click', () => {
+    startOverlay.classList.add('hidden');
+    playing = true;
+  });
+
+  // ---- 背景 ----
+  const bgStars = Array.from({ length: 90 }, () => ({
+    x: Math.random(), y: Math.random(), s: Math.random() * 1.5 + .3, tw: Math.random() * Math.PI * 2
+  }));
+  const nebulae = Array.from({ length: 3 }, (_, i) => ({
+    x: Math.random(), y: Math.random(), r: 0.25 + Math.random() * 0.2,
+    hue: [265, 200, 320][i],
+  }));
+
+  let t = 0;
+  function frame() {
+    t += 1 / 60;
+
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0a0d28');
+    bg.addColorStop(1, '#141a42');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const n of nebulae) {
+      const g = ctx.createRadialGradient(n.x * W, n.y * H, 0, n.x * W, n.y * H, n.r * Math.min(W, H));
+      g.addColorStop(0, `hsla(${n.hue}, 60%, 55%, .07)`);
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    for (const s of bgStars) {
+      const a = 0.2 + 0.4 * (0.5 + 0.5 * Math.sin(t * 1.1 + s.tw));
+      ctx.fillStyle = `rgba(220, 228, 255, ${a})`;
+      ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+    }
+
+    if (puzzle) drawPuzzle();
+
+    if (denyFlash) {
+      denyFlash.t -= 0.04;
+      if (denyFlash.t <= 0) denyFlash = null;
+    }
+    if (celebrating > 0 && celebrating < 1.5) celebrating += 1 / 60;
+
+    requestAnimationFrame(frame);
+  }
+
+  function drawPuzzle() {
+    const litSet = new Set(path);
+    const glow = celebrating ? 1 + Math.sin(t * 10) * 0.15 : 1;
+
+    // 線
+    if (path.length > 1) {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = celebrating ? 'rgba(255, 250, 230, .35)' : 'rgba(255, 233, 176, .22)';
+      ctx.lineWidth = 12 * glow;
+      strokePath();
+      ctx.strokeStyle = celebrating ? '#fffdf2' : '#ffe9b0';
+      ctx.lineWidth = 3.5;
+      strokePath();
+    }
+
+    // 星のもや(壁)
+    for (const wk of puzzle.walls) {
+      const [k1, k2] = wk.split('|');
+      const a = puzzle.cells.get(k1), b = puzzle.cells.get(k2);
+      if (!a || !b) continue;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const vert = a.cx === b.cx; // 縦につながる隙間 → もやは横向き
+      const len = cellPx * 0.42;
+      const wobble = Math.sin(t * 1.8 + mx * 0.05 + my * 0.05) * 2;
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(vert ? 0 : Math.PI / 2);
+      // にじみ
+      ctx.strokeStyle = 'rgba(157, 184, 255, .18)';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-len / 2 + wobble, 0);
+      ctx.quadraticCurveTo(0, wobble * 1.5, len / 2 + wobble, 0);
+      ctx.stroke();
+      // 芯
+      ctx.strokeStyle = 'rgba(157, 184, 255, .75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-len / 2 + wobble, 0);
+      ctx.quadraticCurveTo(0, wobble * 1.5, len / 2 + wobble, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 星
+    const expected = nextExpectedNumber();
+    for (const c of puzzle.cells.values()) {
+      const lit = litSet.has(c.key);
+      const num = puzzle.numbered.get(c.key);
+      const twinkle = 0.75 + 0.25 * Math.sin(t * 2 + c.tw);
+      const denied = denyFlash && denyFlash.key === c.key;
+
+      if (num !== undefined) {
+        // 数字星
+        const isNext = !lit && num === expected && !(num === puzzle.maxNum && path.length + 1 !== puzzle.cells.size);
+        const r = Math.max(13, cellPx * 0.19);
+        if (denied) {
+          ctx.fillStyle = `rgba(255, 120, 150, ${denyFlash.t * 0.5})`;
+          ctx.beginPath(); ctx.arc(c.x, c.y, r + 9, 0, Math.PI * 2); ctx.fill();
+        }
+        if (lit || celebrating) {
+          ctx.fillStyle = `rgba(255, 233, 176, ${0.3 * glow})`;
+          ctx.beginPath(); ctx.arc(c.x, c.y, r + 7, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = lit ? '#ffe9b0' : (num === puzzle.maxNum ? '#c9a8ff' : '#3c4470');
+        ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = lit ? '#fff8e0' : 'rgba(255, 233, 176, .7)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = lit ? '#4a3a12' : '#f2ecdc';
+        ctx.font = `700 ${Math.max(13, cellPx * 0.2)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(num, c.x, c.y + 1);
+        // つぎに通るべき星は やわらかく脈打つ
+        if (isNext && !celebrating) {
+          const pr = r + 6 + Math.sin(t * 3) * 2.5;
+          ctx.strokeStyle = 'rgba(126, 220, 232, .85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(c.x, c.y, pr, 0, Math.PI * 2); ctx.stroke();
+        }
+      } else if (lit) {
+        ctx.fillStyle = `rgba(255, 233, 176, ${0.25 * glow})`;
+        ctx.beginPath(); ctx.arc(c.x, c.y, 15 * glow, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = celebrating ? '#fffdf2' : '#ffe9b0';
+        ctx.beginPath(); ctx.arc(c.x, c.y, 6, 0, Math.PI * 2); ctx.fill();
+        drawCross(c.x, c.y, 11 * glow, `rgba(255, 244, 210, ${0.8 * twinkle})`);
+      } else {
+        ctx.fillStyle = `rgba(127, 139, 201, ${0.5 * twinkle + 0.3})`;
+        ctx.beginPath(); ctx.arc(c.x, c.y, 4.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  function strokePath() {
+    ctx.beginPath();
+    for (let i = 0; i < path.length; i++) {
+      const c = puzzle.cells.get(path[i]);
+      i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y);
+    }
+    ctx.stroke();
+  }
+
+  function drawCross(x, y, r, style) {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
+    ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
+    ctx.stroke();
+  }
+
+  level = 0;
+  playing = false;
+  resize();
+  loadLevel(level);
+  frame();
+})();
+</script>
+</body>
+</html>

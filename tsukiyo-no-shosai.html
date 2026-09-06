@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>月夜の書斎からの脱出</title>
+<style>
+  :root {
+    --night: #141126;
+    --wall: #2b2142;
+    --wood: #4a3628;
+    --wood-d: #37281d;
+    --gold: #ffdf9e;
+    --ink: #efeadf;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: var(--night);
+    color: var(--ink);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .stage {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; padding: 10px;
+  }
+  #room {
+    width: min(96vw, 78vh * 1.6);
+    max-height: 72vh;
+    display: block;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .spot { cursor: pointer; }
+  .spot:hover { filter: brightness(1.18); }
+
+  .bottombar {
+    width: min(96vw, 78vh * 1.6);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .inventory {
+    flex: 1;
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 8px 12px;
+    min-height: 46px; font-size: 14px;
+  }
+  .inventory .label { font-size: 11px; opacity: .6; margin-right: 4px; }
+  .inventory .item {
+    background: rgba(255, 223, 158, .12);
+    border: 1px solid rgba(255, 223, 158, .4);
+    border-radius: 8px; padding: 4px 10px;
+  }
+  .hint-btn {
+    font: inherit; font-size: 14px; font-weight: 700;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 10px 20px; cursor: pointer;
+    white-space: nowrap;
+  }
+  .hint-btn:active { background: rgba(255,255,255,.16); }
+
+  .toast {
+    position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%);
+    background: rgba(20, 17, 38, .92);
+    border: 1px solid rgba(255, 223, 158, .35);
+    border-radius: 12px; padding: 10px 18px;
+    font-size: 14px; line-height: 1.6; max-width: 88vw;
+    pointer-events: none; opacity: 0; transition: opacity .25s;
+    text-align: center; z-index: 40;
+  }
+  .toast.on { opacity: 1; }
+
+  /* ---- モーダル ---- */
+  .modal-bg {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(8, 6, 20, .7);
+    display: flex; align-items: center; justify-content: center;
+    padding: 18px;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .modal-bg.on { opacity: 1; pointer-events: auto; }
+  .modal {
+    background: #1d1834;
+    border: 1px solid rgba(255, 223, 158, .3);
+    border-radius: 16px;
+    padding: 22px;
+    max-width: 430px; width: 100%;
+    max-height: 86vh; overflow-y: auto;
+    text-align: center;
+    box-shadow: 0 12px 50px rgba(0,0,0,.6);
+  }
+  .modal h2 { font-size: 19px; margin-bottom: 10px; letter-spacing: .1em; color: var(--gold); }
+  .modal p { font-size: 14px; line-height: 1.9; margin-bottom: 12px; }
+  .modal .poem { font-size: 14.5px; line-height: 2.1; letter-spacing: .08em; margin: 10px 0 14px; }
+  .modal .close {
+    font: inherit; font-size: 14px; font-weight: 700;
+    color: var(--ink); background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 9px 30px; cursor: pointer; margin-top: 6px;
+  }
+  .modal .action {
+    font: inherit; font-size: 15px; font-weight: 700;
+    color: #2c2210; background: var(--gold);
+    border: none; border-radius: 999px;
+    padding: 11px 32px; cursor: pointer; margin: 6px 4px;
+  }
+  .modal .action:active { transform: translateY(2px); }
+
+  /* ダイヤル錠 */
+  .dials { display: flex; justify-content: center; gap: 10px; margin: 14px 0; }
+  .dial { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .dial button {
+    font-size: 16px; width: 44px; height: 30px;
+    background: rgba(255,255,255,.1); color: var(--ink);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 8px; cursor: pointer;
+  }
+  .dial .num {
+    width: 44px; height: 50px; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 700;
+    background: #0f0c20; border: 1px solid rgba(255, 223, 158, .4); border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 記号錠 */
+  .sym-display {
+    display: flex; justify-content: center; gap: 10px; margin: 12px 0;
+    min-height: 46px; align-items: center;
+  }
+  .sym-slot {
+    width: 44px; height: 44px; border-radius: 10px;
+    border: 1px dashed rgba(255,255,255,.3);
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+  }
+  .sym-slot.filled { border-style: solid; border-color: rgba(255, 223, 158, .6); background: rgba(255, 223, 158, .08); }
+  .sym-btns { display: flex; justify-content: center; gap: 10px; margin-bottom: 8px; }
+  .sym-btns button {
+    font-size: 24px; width: 54px; height: 54px;
+    background: rgba(255,255,255,.08); color: var(--ink);
+    border: 1px solid rgba(255,255,255,.25); border-radius: 12px; cursor: pointer;
+  }
+  .sym-btns button:active { background: rgba(255,255,255,.18); }
+  .shake { animation: shake .4s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-7px); } 75% { transform: translateX(7px); }
+  }
+
+  /* 絵画クローズアップ */
+  .moons { display: flex; justify-content: center; gap: 14px; margin: 14px 0 6px; flex-wrap: wrap; }
+  .moon-card { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 82px; }
+  .moon-card svg { display: block; }
+  .moon-card .mname { font-size: 12px; opacity: .85; }
+  .moon-card .mstars { font-size: 11px; color: var(--gold); letter-spacing: 1px; line-height: 1.4; word-break: break-all; }
+
+  /* 開始・クリア画面 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 14px; text-align: center; padding: 24px;
+    background: rgba(10, 8, 24, .86);
+    backdrop-filter: blur(3px);
+    transition: opacity .4s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay h1 { font-size: 32px; letter-spacing: .15em; font-weight: 700; color: var(--gold); text-shadow: 0 0 26px rgba(255,223,158,.3); }
+  .overlay p { font-size: 14px; line-height: 2; opacity: .92; max-width: 26em; }
+  .overlay .big-btn {
+    font: inherit; font-size: 16px; font-weight: 700;
+    color: #2c2210; background: var(--gold);
+    border: none; border-radius: 999px;
+    padding: 13px 46px; cursor: pointer;
+    box-shadow: 0 0 26px rgba(255, 223, 158, .35);
+  }
+  .overlay .big-btn:active { transform: translateY(2px); }
+  .overlay .stats { font-size: 15px; line-height: 2; color: var(--gold); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast, .modal-bg, .overlay { transition: none; }
+    .shake { animation: none; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;bottom:14px;left:14px;z-index:99999;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;background:rgba(11,15,28,0.72);border:1px solid rgba(246,201,119,0.35);color:#f6c877;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:12.5px;letter-spacing:0.04em;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,0.35);">← 遊戯場へ戻る</a>
+
+<div class="stage">
+  <svg id="room" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+    <!-- 壁と床 -->
+    <rect x="0" y="0" width="800" height="380" fill="#2b2142"/>
+    <rect x="0" y="380" width="800" height="120" fill="#37281d"/>
+    <rect x="0" y="380" width="800" height="8" fill="#4a3628"/>
+
+    <!-- 窓と満月 -->
+    <g id="spot-window" class="spot">
+      <rect x="48" y="60" width="130" height="170" rx="8" fill="#0e1230" stroke="#4a3628" stroke-width="8"/>
+      <line x1="113" y1="64" x2="113" y2="226" stroke="#4a3628" stroke-width="5"/>
+      <line x1="52" y1="145" x2="174" y2="145" stroke="#4a3628" stroke-width="5"/>
+      <circle cx="88" cy="105" r="24" fill="#f5e7bd"/>
+      <circle cx="88" cy="105" r="30" fill="rgba(245,231,189,.15)"/>
+      <circle cx="150" cy="200" r="1.5" fill="#cdd6ff"/>
+      <circle cx="132" cy="180" r="1.2" fill="#cdd6ff"/>
+      <circle cx="160" cy="90" r="1.4" fill="#cdd6ff"/>
+    </g>
+
+    <!-- 時計 -->
+    <g id="spot-clock" class="spot">
+      <circle cx="272" cy="95" r="34" fill="#efe6d2" stroke="#4a3628" stroke-width="7"/>
+      <line x1="272" y1="95" x2="272" y2="72" stroke="#2c2210" stroke-width="4" stroke-linecap="round"/>
+      <line x1="272" y1="95" x2="272" y2="66" stroke="#2c2210" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="272" cy="95" r="3.5" fill="#2c2210"/>
+      <rect x="266" y="129" width="12" height="34" fill="#4a3628"/>
+      <circle cx="272" cy="170" r="9" fill="#b8933f"/>
+    </g>
+
+    <!-- 絵画 -->
+    <g id="spot-painting" class="spot">
+      <rect x="340" y="52" width="180" height="112" rx="4" fill="#141126" stroke="#b8933f" stroke-width="7"/>
+      <circle cx="378" cy="96" r="14" fill="#f5e7bd"/><circle cx="384" cy="92" r="12" fill="#141126"/>
+      <circle cx="420" cy="96" r="14" fill="#0e0c1e" stroke="#8a86a8" stroke-width="1.5"/>
+      <path d="M462 82 a14 14 0 0 1 0 28 z" fill="#f5e7bd"/>
+      <circle cx="497" cy="96" r="14" fill="#f5e7bd"/>
+      <text x="430" y="146" text-anchor="middle" font-size="12" fill="#8a86a8">— 月の絵 —</text>
+    </g>
+
+    <!-- 本棚 -->
+    <g id="spot-shelf" class="spot">
+      <rect x="580" y="60" width="150" height="250" rx="6" fill="#4a3628"/>
+      <rect x="590" y="72" width="130" height="64" fill="#2c2114"/>
+      <rect x="590" y="150" width="130" height="64" fill="#2c2114"/>
+      <rect x="590" y="228" width="130" height="64" fill="#2c2114"/>
+      <rect x="596" y="80" width="14" height="56" fill="#8a4040"/>
+      <rect x="612" y="86" width="14" height="50" fill="#3f6656"/>
+      <rect x="628" y="78" width="16" height="58" fill="#5a4f8a"/>
+      <rect x="646" y="84" width="13" height="52" fill="#8a6a3f"/>
+      <rect x="661" y="80" width="15" height="56" fill="#6e3f5a"/>
+      <rect x="678" y="88" width="13" height="48" fill="#3f5a6e"/>
+      <rect x="596" y="158" width="15" height="56" fill="#6e5a3f"/>
+      <rect x="613" y="164" width="13" height="50" fill="#4a6e3f"/>
+      <!-- 光る本 -->
+      <rect x="630" y="154" width="17" height="60" fill="#e8d48a">
+        <animate attributeName="opacity" values="1;.6;1" dur="2.4s" repeatCount="indefinite"/>
+      </rect>
+      <rect x="650" y="160" width="14" height="54" fill="#8a4040"/>
+      <rect x="666" y="156" width="15" height="58" fill="#3f5a6e"/>
+      <rect x="596" y="236" width="14" height="56" fill="#5a4f8a"/>
+      <rect x="612" y="242" width="15" height="50" fill="#8a6a3f"/>
+      <rect x="629" y="238" width="13" height="54" fill="#3f6656"/>
+      <rect x="644" y="234" width="16" height="58" fill="#6e3f5a"/>
+      <rect x="662" y="240" width="14" height="52" fill="#8a4040"/>
+    </g>
+
+    <!-- 机 -->
+    <g id="spot-desk" class="spot">
+      <rect x="210" y="270" width="240" height="18" rx="4" fill="#5c4430"/>
+      <rect x="222" y="288" width="216" height="70" fill="#4a3628"/>
+      <rect x="240" y="298" width="180" height="26" rx="4" fill="#37281d" stroke="#5c4430" stroke-width="2"/>
+      <circle cx="330" cy="311" r="5" fill="#b8933f"/>
+      <rect x="228" y="358" width="16" height="30" fill="#37281d"/>
+      <rect x="416" y="358" width="16" height="30" fill="#37281d"/>
+    </g>
+
+    <!-- 燭台(机の上) -->
+    <g id="spot-candle" class="spot">
+      <rect x="266" y="238" width="10" height="32" fill="#efe6d2"/>
+      <path d="M258 270 h26 l-4 10 h-18 z" fill="#b8933f"/>
+      <g id="flame" opacity="0">
+        <ellipse cx="271" cy="228" rx="7" ry="12" fill="#ffb340">
+          <animate attributeName="ry" values="12;14;12" dur=".7s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="271" cy="231" rx="3.5" ry="6" fill="#fff3c4"/>
+        <circle cx="271" cy="235" r="60" fill="rgba(255, 190, 90, .10)"/>
+      </g>
+    </g>
+
+    <!-- 金庫 -->
+    <g id="spot-safe" class="spot">
+      <rect x="520" y="330" width="90" height="66" rx="8" fill="#3a3a4a" stroke="#23232e" stroke-width="4"/>
+      <circle cx="565" cy="363" r="16" fill="#23232e" stroke="#8a86a8" stroke-width="3"/>
+      <line x1="565" y1="363" x2="565" y2="351" stroke="#8a86a8" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <!-- 隠し文字(ロウソク点灯で浮かぶ) -->
+    <g id="hiddenText" opacity="0" style="transition: opacity 1.2s;">
+      <text x="565" y="315" text-anchor="middle" font-size="21" fill="#9fe8d8" letter-spacing="4">☾ → ★ → ☀</text>
+      <text x="565" y="316" text-anchor="middle" font-size="21" fill="rgba(159,232,216,.4)" letter-spacing="4">☾ → ★ → ☀</text>
+    </g>
+
+    <!-- 扉 -->
+    <g id="spot-door" class="spot">
+      <rect x="60" y="290" width="86" height="106" rx="6" fill="#5c4430" stroke="#37281d" stroke-width="5"/>
+      <rect x="72" y="302" width="62" height="38" rx="3" fill="#4a3628"/>
+      <rect x="72" y="348" width="62" height="38" rx="3" fill="#4a3628"/>
+      <circle cx="128" cy="345" r="5" fill="#b8933f"/>
+      <rect x="125" y="352" width="6" height="9" rx="2" fill="#23232e"/>
+    </g>
+
+    <!-- 絨毯 -->
+    <g id="spot-rug" class="spot">
+      <ellipse cx="330" cy="430" rx="150" ry="34" fill="#6e3f5a"/>
+      <ellipse cx="330" cy="430" rx="118" ry="25" fill="none" stroke="#8a5a78" stroke-width="4"/>
+    </g>
+  </svg>
+
+  <div class="bottombar">
+    <div class="inventory" id="inventory"><span class="label">もちもの</span><span id="invEmpty" style="opacity:.5">なし</span></div>
+    <button class="hint-btn" id="hintBtn">💡 ヒント</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h1>月夜の書斎からの脱出</h1>
+  <div class="rank-side-layout">
+    <div class="rank-side-left">
+      <p>目がさめると、見知らぬ書斎に閉じこめられていた。<br>
+      扉には鍵がかかっている。満月だけが、窓の外からこちらを見ている。<br><br>
+      部屋のあちこちを調べ、手がかりをつなぎあわせて、脱出せよ。</p>
+      <button class="big-btn" id="startBtn">目をさます</button>
+    </div>
+    <div class="rank-side-right">
+      <div id="startRankBox"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <h1>脱出成功!</h1>
+  <p>銀の鍵は音もなくまわり、扉のむこうには<br>月あかりの廊下がつづいていた——。</p>
+  <div class="stats" id="stats"></div>
+  <div id="rankBox"></div>
+  <button class="big-btn" id="retryBtn">もういちど挑戦</button>
+</div>
+
+<script src="ranking.js"></script>
+<script>
+(() => {
+  const GAME_KEY = 'tsukiyo-no-shosai';
+  Ranking.mount('startRankBox', GAME_KEY, {
+    title: 'だっしゅつタイム ランキング',
+    formatValue: v => Ranking.formatTime(v),
+    formatMeta: e => Ranking.escapeHtml(e.name || '名無しさん') + ' ・ ヒント' + (e.meta && e.meta.hints != null ? e.meta.hints : 0) + '回'
+  });
+  // ---- 状態 ----
+  const state = {
+    readPoem: false,
+    drawerOpen: false,
+    hasMatch: false,
+    candleLit: false,
+    safeOpen: false,
+    hasKey: false,
+    escaped: false,
+    hintsUsed: 0,
+    startTime: null,
+  };
+  const DRAWER_CODE = '7259';
+  const SAFE_CODE = ['☾', '★', '☀'];
+
+  const toast = document.getElementById('toast');
+  const modalBg = document.getElementById('modalBg');
+  const modal = document.getElementById('modal');
+  const invEl = document.getElementById('inventory');
+  const invEmpty = document.getElementById('invEmpty');
+
+  let toastTimer = null;
+  function say(msg) {
+    toast.textContent = msg;
+    toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('on'), 2600);
+  }
+
+  function updateInventory() {
+    [...invEl.querySelectorAll('.item')].forEach(el => el.remove());
+    const items = [];
+    if (state.hasMatch) items.push('🔥 マッチ');
+    if (state.hasKey) items.push('🗝 銀の鍵');
+    invEmpty.style.display = items.length ? 'none' : '';
+    for (const it of items) {
+      const el = document.createElement('span');
+      el.className = 'item';
+      el.textContent = it;
+      invEl.appendChild(el);
+    }
+  }
+
+  function openModal(html) {
+    modal.innerHTML = html;
+    modalBg.classList.add('on');
+    const closeBtn = modal.querySelector('.close');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  }
+  function closeModal() { modalBg.classList.remove('on'); }
+  modalBg.addEventListener('click', e => { if (e.target === modalBg) closeModal(); });
+
+  // ---- 各スポット ----
+  function moonSVG(kind) {
+    // kind: full / new / crescent / half
+    const base = `<svg width="56" height="56" viewBox="0 0 56 56">`;
+    if (kind === 'full') return base + `<circle cx="28" cy="28" r="20" fill="#f5e7bd"/></svg>`;
+    if (kind === 'new') return base + `<circle cx="28" cy="28" r="20" fill="#100e20" stroke="#8a86a8" stroke-width="2"/></svg>`;
+    if (kind === 'half') return base + `<path d="M28 8 a20 20 0 0 1 0 40 z" fill="#f5e7bd"/><path d="M28 8 a20 20 0 0 0 0 40 z" fill="#100e20"/></svg>`;
+    // crescent
+    return base + `<circle cx="28" cy="28" r="20" fill="#f5e7bd"/><circle cx="36" cy="24" r="19" fill="#1d1834"/></svg>`;
+  }
+
+  const spots = {
+    window() {
+      openModal(`
+        <h2>窓</h2>
+        <p>鉄格子ごしに、まんまるの満月がのぼっている。<br>
+        今夜は満月——月の旅の、おわりの夜だ。</p>
+        <button class="close">とじる</button>
+      `);
+    },
+    clock() {
+      openModal(`
+        <h2>柱時計</h2>
+        <p>振り子は止まり、針は真夜中を指したまま動かない。<br>
+        時だけが、この部屋に置き去りにされている。</p>
+        <button class="close">とじる</button>
+      `);
+    },
+    painting() {
+      openModal(`
+        <h2>月の絵</h2>
+        <p>四つの月が描かれ、それぞれの下に小さな星が散っている。</p>
+        <div class="moons">
+          <div class="moon-card">${moonSVG('half')}<div class="mname">半月</div><div class="mstars">★★★★★</div></div>
+          <div class="moon-card">${moonSVG('new')}<div class="mname">新月</div><div class="mstars">★★★★★★★</div></div>
+          <div class="moon-card">${moonSVG('full')}<div class="mname">満月</div><div class="mstars">★★★★★★★★★</div></div>
+          <div class="moon-card">${moonSVG('crescent')}<div class="mname">三日月</div><div class="mstars">★★</div></div>
+        </div>
+        <p style="opacity:.7; font-size:12.5px;">……ならびに、意味はあるのだろうか。</p>
+        <button class="close">とじる</button>
+      `);
+    },
+    shelf() {
+      state.readPoem = true;
+      openModal(`
+        <h2>本棚</h2>
+        <p>一冊だけ、ほのかに光る本がある。<br>『月詠みの詩』——ひらくと、こう記されていた。</p>
+        <div class="poem">
+          月は 闇より生まれ<br>
+          細き弓を へて<br>
+          なかばに 満ち<br>
+          やがて まどかに かがやく
+        </div>
+        <p style="opacity:.7; font-size:12.5px;">月の満ちてゆく順番を、詠っているようだ。</p>
+        <button class="close">とじる</button>
+      `);
+    },
+    rug() {
+      openModal(`
+        <h2>絨毯</h2>
+        <p>めくってみたが、ほこりのほかには何もない。<br>……くしゅん。</p>
+        <button class="close">とじる</button>
+      `);
+    },
+    desk(){
+      if (state.drawerOpen) {
+        openModal(`
+          <h2>机の引き出し</h2>
+          <p>引き出しはもう開いている。<br>マッチと、一枚のメモが入っていた。</p>
+          <p class="poem">「灯りは 真実を映す」</p>
+          <button class="close">とじる</button>
+        `);
+        return;
+      }
+      openModal(`
+        <h2>机の引き出し</h2>
+        <p>四桁のダイヤル錠がかかっている。</p>
+        <div class="dials" id="dials"></div>
+        <button class="action" id="tryDrawer">あける</button>
+        <button class="close">とじる</button>
+      `);
+      const dials = modal.querySelector('#dials');
+      const values = [0, 0, 0, 0];
+      values.forEach((v, i) => {
+        const d = document.createElement('div');
+        d.className = 'dial';
+        d.innerHTML = `<button data-d="1">▲</button><div class="num">0</div><button data-d="-1">▼</button>`;
+        const num = d.querySelector('.num');
+        d.querySelectorAll('button').forEach(b => {
+          b.addEventListener('click', () => {
+            values[i] = (values[i] + Number(b.dataset.d) + 10) % 10;
+            num.textContent = values[i];
+          });
+        });
+        dials.appendChild(d);
+      });
+      modal.querySelector('#tryDrawer').addEventListener('click', () => {
+        if (values.join('') === DRAWER_CODE) {
+          state.drawerOpen = true;
+          state.hasMatch = true;
+          updateInventory();
+          openModal(`
+            <h2>机の引き出し</h2>
+            <p>カチリ——錠がはずれた。<br>中には <b>マッチ</b> と、一枚のメモ。</p>
+            <p class="poem">「灯りは 真実を映す」</p>
+            <button class="close">とじる</button>
+          `);
+          say('マッチを手に入れた');
+        } else {
+          modal.classList.add('shake');
+          setTimeout(() => modal.classList.remove('shake'), 450);
+          say('錠はびくともしない');
+        }
+      });
+    },
+    candle() {
+      if (state.candleLit) {
+        openModal(`
+          <h2>燭台</h2>
+          <p>炎がゆれている。その灯りに照らされて、<br>金庫の上の壁に、うっすらと文字が浮かんでいる。</p>
+          <button class="close">とじる</button>
+        `);
+        return;
+      }
+      if (state.hasMatch) {
+        openModal(`
+          <h2>燭台</h2>
+          <p>使い込まれた蝋燭が立っている。</p>
+          <button class="action" id="lightBtn">🔥 マッチで火をつける</button>
+          <button class="close">とじる</button>
+        `);
+        modal.querySelector('#lightBtn').addEventListener('click', () => {
+          state.candleLit = true;
+          document.getElementById('flame').setAttribute('opacity', '1');
+          document.getElementById('hiddenText').setAttribute('opacity', '1');
+          closeModal();
+          say('炎に照らされ……壁に何かが浮かびあがった!');
+        });
+      } else {
+        openModal(`
+          <h2>燭台</h2>
+          <p>蝋燭が立っているが、火をつけるものがない。</p>
+          <button class="close">とじる</button>
+        `);
+      }
+    },
+    safe() {
+      if (state.safeOpen) {
+        openModal(`
+          <h2>金庫</h2>
+          <p>金庫はもう空っぽだ。銀の鍵はこの手の中にある。</p>
+          <button class="close">とじる</button>
+        `);
+        return;
+      }
+      const revealed = state.candleLit
+        ? `<p style="color:#9fe8d8; letter-spacing:.2em;">壁の文字 「☾ → ★ → ☀」</p>`
+        : `<p style="opacity:.7;">扉には四つの記号ボタン。正しい順に三つ押すようだ。</p>`;
+      openModal(`
+        <h2>金庫</h2>
+        ${revealed}
+        <div class="sym-display" id="symDisplay">
+          <div class="sym-slot"></div><div class="sym-slot"></div><div class="sym-slot"></div>
+        </div>
+        <div class="sym-btns" id="symBtns">
+          <button>☾</button><button>★</button><button>☀</button><button>☁</button>
+        </div>
+        <button class="close">とじる</button>
+      `);
+      const seq = [];
+      const slots = [...modal.querySelectorAll('.sym-slot')];
+      modal.querySelector('#symBtns').addEventListener('click', e => {
+        if (e.target.tagName !== 'BUTTON') return;
+        if (seq.length >= 3) return;
+        seq.push(e.target.textContent);
+        slots[seq.length - 1].textContent = e.target.textContent;
+        slots[seq.length - 1].classList.add('filled');
+        if (seq.length === 3) {
+          if (seq.join('') === SAFE_CODE.join('')) {
+            state.safeOpen = true;
+            state.hasKey = true;
+            updateInventory();
+            setTimeout(() => {
+              openModal(`
+                <h2>金庫</h2>
+                <p>ゴトン——重い扉がひらいた。<br>中には <b>銀の鍵</b> がひとつ。</p>
+                <button class="close">とじる</button>
+              `);
+              say('銀の鍵を手に入れた');
+            }, 350);
+          } else {
+            setTimeout(() => {
+              modal.classList.add('shake');
+              seq.length = 0;
+              slots.forEach(s => { s.textContent = ''; s.classList.remove('filled'); });
+              setTimeout(() => modal.classList.remove('shake'), 450);
+              say('ちがう順番のようだ');
+            }, 250);
+          }
+        }
+      });
+    },
+    door() {
+      if (state.hasKey) {
+        openModal(`
+          <h2>扉</h2>
+          <p>銀の鍵が、鍵穴にぴたりと吸いこまれていく。</p>
+          <button class="action" id="escapeBtn">🗝 扉をあける</button>
+          <button class="close">まだ部屋を調べる</button>
+        `);
+        modal.querySelector('#escapeBtn').addEventListener('click', () => {
+          state.escaped = true;
+          closeModal();
+          const sec = Math.round((Date.now() - state.startTime) / 1000);
+          const m = Math.floor(sec / 60), s = sec % 60;
+          document.getElementById('stats').innerHTML =
+            `脱出時間 ${m}分${s}秒 / ヒント ${state.hintsUsed}回`;
+          const result = Ranking.record(GAME_KEY, sec, { sortDir: 'asc', meta: { hints: state.hintsUsed } });
+          Ranking.mount('rankBox', GAME_KEY, {
+            title: 'だっしゅつタイム ランキング',
+            formatValue: v => Ranking.formatTime(v),
+            formatMeta: e => Ranking.escapeHtml(e.name || '名無しさん') + ' ・ ヒント' + (e.meta && e.meta.hints != null ? e.meta.hints : 0) + '回',
+            highlightDate: result.entry.date
+          });
+          document.getElementById('endOverlay').classList.remove('hidden');
+        });
+      } else {
+        openModal(`
+          <h2>扉</h2>
+          <p>がっしりと施錠されている。<br>鍵穴は銀色にひかっていて、小さな鍵が合いそうだ。</p>
+          <button class="close">とじる</button>
+        `);
+      }
+    },
+  };
+
+  for (const id of Object.keys(spots)) {
+    document.getElementById('spot-' + id).addEventListener('click', () => {
+      if (!state.escaped) spots[id]();
+    });
+  }
+
+  // ---- ヒント ----
+  document.getElementById('hintBtn').addEventListener('click', () => {
+    state.hintsUsed++;
+    if (!state.drawerOpen) {
+      if (!state.readPoem) say('💡 本棚に、ほのかに光る本がある');
+      else say('💡 詩がうたう「月の満ちる順」に、絵の星を数えてみては');
+    } else if (!state.candleLit) {
+      say('💡 メモいわく「灯りは真実を映す」。マッチの出番だ');
+    } else if (!state.safeOpen) {
+      say('💡 壁に浮かんだ記号の順に、金庫のボタンを');
+    } else {
+      say('💡 銀の鍵で、扉をあけよう');
+    }
+  });
+
+  // ---- 開始 / リトライ ----
+  document.getElementById('startBtn').addEventListener('click', () => {
+    document.getElementById('startOverlay').classList.add('hidden');
+    state.startTime = Date.now();
+    say('……ここは、どこだろう。部屋を調べてみよう');
+  });
+  document.getElementById('retryBtn').addEventListener('click', () => location.reload());
+
+  updateInventory();
+})();
+</script>
+</body>
+</html>

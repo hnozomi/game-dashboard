@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>月下の決闘 〜通信対戦〜</title>
+<style>
+  :root {
+    --night: #10142e;
+    --gold: #ffe9b0;
+    --blue: #6fa8ff;
+    --red: #ff7a6f;
+    --ink: #eef0fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: linear-gradient(#0b0f26, #141a3c 70%, #0e1225);
+    color: var(--ink);
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .screen {
+    position: fixed; inset: 0;
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; text-align: center; padding: 22px;
+  }
+  .screen.on { display: flex; }
+
+  h1 { font-size: 32px; letter-spacing: .25em; font-weight: 700; color: var(--gold); text-shadow: 0 0 26px rgba(255,233,176,.35); }
+  h1 small { display: block; font-size: 13px; letter-spacing: .35em; opacity: .8; margin-top: 8px; }
+
+  .moon-deco {
+    width: 90px; height: 90px; border-radius: 50%;
+    background: #f5e7bd;
+    box-shadow: 0 0 50px rgba(245,231,189,.45), inset -14px -8px 0 rgba(210,195,150,.4);
+  }
+
+  .rules { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 13.5px; line-height: 1.75; max-width: 27em; }
+  .rules div { background: rgba(255,233,176,.06); border: 1px solid rgba(255,233,176,.14); border-radius: 10px; padding: 8px 13px; }
+  .rules b { color: var(--gold); }
+
+  .big-btn {
+    font: inherit; font-size: 16px; font-weight: 700;
+    color: #2a2210; background: var(--gold);
+    border: none; border-radius: 999px;
+    padding: 14px 46px; cursor: pointer;
+    box-shadow: 0 0 26px rgba(255, 233, 176, .4);
+  }
+  .big-btn:active { transform: translateY(2px); }
+  .big-btn:disabled { opacity: .45; box-shadow: none; }
+  .sub-btn {
+    font: inherit; font-size: 14px; font-weight: 700;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 999px; padding: 11px 30px; cursor: pointer;
+  }
+  .sub-btn:active { background: rgba(255,255,255,.16); }
+
+  .code-display {
+    font-size: 52px; font-weight: 700; letter-spacing: .3em;
+    color: var(--gold); text-shadow: 0 0 24px rgba(255,233,176,.5);
+    font-variant-numeric: tabular-nums;
+    padding-left: .3em;
+  }
+  .code-input {
+    font: inherit; font-size: 34px; font-weight: 700; letter-spacing: .3em;
+    text-align: center; width: 5.2em;
+    color: var(--ink); background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,233,176,.4); border-radius: 14px;
+    padding: 10px 0 10px .3em; outline: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid rgba(255,233,176,.2);
+    border-top-color: var(--gold);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .note { font-size: 12px; opacity: .6; line-height: 1.7; max-width: 26em; }
+  .err { font-size: 13px; color: #ffb8c4; min-height: 1.4em; }
+
+  /* ---- 対戦画面 ---- */
+  #duelScreen { justify-content: flex-start; padding-top: 14px; gap: 8px; }
+  .duel-hud {
+    width: 100%; max-width: 480px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13.5px; font-weight: 700;
+  }
+  .duel-hud .you { color: var(--blue); }
+  .duel-hud .foe { color: var(--red); text-align: right; }
+  .duel-hud .lan { font-size: 17px; letter-spacing: 2px; display: block; margin-top: 2px; }
+  .round-info { font-size: 12.5px; letter-spacing: .25em; opacity: .75; }
+
+  .arena {
+    flex: 1; width: 100%; max-width: 480px;
+    border-radius: 18px;
+    background: radial-gradient(circle at 50% 22%, rgba(245,231,189,.13), transparent 45%),
+                linear-gradient(#0d1128, #171d40 72%, #0c101f 72%, #0a0d18);
+    border: 1px solid rgba(255,255,255,.1);
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 20px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .arena .a-moon {
+    position: absolute; top: 9%; left: 50%; transform: translateX(-50%);
+    width: 64px; height: 64px; border-radius: 50%;
+    background: #f5e7bd; box-shadow: 0 0 40px rgba(245,231,189,.4);
+  }
+  .arena .samurai {
+    position: absolute; bottom: 24%; font-size: 44px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,.5));
+    transition: transform .25s;
+  }
+  .arena .s-you { left: 16%; }
+  .arena .s-foe { right: 16%; transform: scaleX(-1); }
+
+  .a-text {
+    position: relative; z-index: 2;
+    font-weight: 700; pointer-events: none;
+  }
+  .a-text.waiting { font-size: 19px; letter-spacing: .35em; opacity: .9; }
+  .a-text.feint { font-size: 16px; letter-spacing: .3em; color: #9fb0d8; }
+  .a-text.slash {
+    font-size: clamp(64px, 22vw, 110px); letter-spacing: .05em;
+    color: #ff5a4a;
+    text-shadow: 0 0 30px rgba(255, 90, 74, .8), 0 0 60px rgba(255, 200, 120, .5);
+  }
+  .a-text.result { font-size: 22px; color: var(--gold); text-shadow: 0 0 18px rgba(255,233,176,.5); line-height: 1.8; }
+  .a-text.result small { display: block; font-size: 13.5px; color: var(--ink); opacity: .9; font-weight: 400; letter-spacing: .05em; }
+  .a-sub { position: relative; z-index: 2; font-size: 12.5px; opacity: .65; pointer-events: none; }
+
+  .arena.flash { animation: flashAnim .35s; }
+  @keyframes flashAnim {
+    0% { background-color: rgba(255,250,235,.9); }
+    100% { background-color: transparent; }
+  }
+  .arena.signal-bg { background-color: rgba(120, 30, 30, .25); }
+
+  #armBtn { position: relative; z-index: 2; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: 2s; }
+    .arena.flash { animation: none; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;bottom:14px;left:14px;z-index:99999;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;background:rgba(11,15,28,0.72);border:1px solid rgba(246,201,119,0.35);color:#f6c877;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:12.5px;letter-spacing:0.04em;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,0.35);">← 遊戯場へ戻る</a>
+
+<!-- タイトル -->
+<div class="screen on" id="titleScreen">
+  <div class="moon-deco"></div>
+  <h1>月下の決闘<small>― 通信対戦 ―</small></h1>
+  <div class="rules">
+    <div>⚔️ それぞれのスマホで戦う <b>3本先取</b>の果し合い。</div>
+    <div>👁 「構える」を押すと勝負開始。<b>「斬!」の合図で画面をタップ</b>。反応の速いほうが一本。</div>
+    <div>🍃 まぎらわしい気配に釣られてタップすると <b>お手つき</b>で相手に一本。</div>
+    <div>📡 ひとりが部屋を作り、もうひとりが<b>4桁のコード</b>で入る。</div>
+  </div>
+  <button class="big-btn" id="hostBtn">部屋を作る</button>
+  <button class="sub-btn" id="joinModeBtn">コードで部屋に入る</button>
+  <div class="note">※ 対戦相手もこの作品を開ける必要があります(共有リンクを送ってください)。対戦データは共有ストレージに保存されるため、この作品を開いた他の人から見える可能性があります。本名などは使いません。</div>
+  <p style="font-size:12.5px; opacity:.7; margin-top:8px;" id="titleTally"></p>
+</div>
+
+<!-- ホスト待機 -->
+<div class="screen" id="hostScreen">
+  <h1 style="font-size:22px;">部屋をつくった</h1>
+  <p style="font-size:14px; opacity:.85;">相手にこのコードを伝えよう</p>
+  <div class="code-display" id="roomCodeDisplay">----</div>
+  <div class="spinner"></div>
+  <p style="font-size:13.5px; opacity:.75;">紅の侍の入室を待っている……</p>
+  <button class="sub-btn" id="hostCancelBtn">やめる</button>
+</div>
+
+<!-- 参加 -->
+<div class="screen" id="joinScreen">
+  <h1 style="font-size:22px;">部屋に入る</h1>
+  <p style="font-size:14px; opacity:.85;">4桁のコードを入力</p>
+  <input class="code-input" id="codeInput" type="tel" maxlength="4" inputmode="numeric" placeholder="0000">
+  <div class="err" id="joinErr"></div>
+  <button class="big-btn" id="joinBtn">入室する</button>
+  <button class="sub-btn" id="joinCancelBtn">もどる</button>
+</div>
+
+<!-- 対戦 -->
+<div class="screen" id="duelScreen">
+  <div class="duel-hud">
+    <div class="you">あなた(<span id="youName"></span>)<span class="lan" id="youLan">○○○</span></div>
+    <div class="round-info" id="roundInfo">第 1 回戦</div>
+    <div class="foe">あいて(<span id="foeName"></span>)<span class="lan" id="foeLan">○○○</span></div>
+  </div>
+  <div class="arena" id="arena">
+    <div class="a-moon"></div>
+    <div class="samurai s-you">🥷</div>
+    <div class="samurai s-foe">🥷</div>
+    <div class="a-text waiting" id="arenaText"></div>
+    <div class="a-sub" id="arenaSub"></div>
+    <button class="big-btn" id="armBtn">構える</button>
+  </div>
+</div>
+
+<!-- 決着 -->
+<div class="screen" id="endScreen">
+  <div class="moon-deco"></div>
+  <h1 style="font-size:26px;" id="endTitle"></h1>
+  <p style="font-size:14px; line-height:2; opacity:.9;" id="endStats"></p>
+  <p style="font-size:12.5px; opacity:.7;" id="tallyBox"></p>
+  <button class="big-btn" id="rematchBtn">再戦を申し込む</button>
+  <p style="font-size:12.5px; opacity:.65;" id="rematchStatus"></p>
+  <button class="sub-btn" id="exitBtn">部屋を出る</button>
+</div>
+
+<script src="ranking.js"></script>
+<script>
+(() => {
+  const GAME_KEY = 'gekka-no-ketto';
+  const $ = id => document.getElementById(id);
+  const screens = ['titleScreen', 'hostScreen', 'joinScreen', 'duelScreen', 'endScreen'];
+  function show(id) {
+    for (const s of screens) $(s).classList.toggle('on', s === id);
+  }
+
+  (() => {
+    const t = Ranking.getTally(GAME_KEY);
+    $('titleTally').textContent = (t.wins + t.losses) > 0
+      ? `あなたの通算成績 ${t.wins}勝${t.losses}敗(自己最高${t.bestStreak}連勝)`
+      : 'まだ対戦記録がありません。まずは一戦!';
+  })();
+
+  const WIN_SCORE = 3;
+  const FEINTS = ['……風が、ないた', '……葉が、落ちた', '……鳥が、たった', '……雲が、月をかすめた', '……虫の音が、やんだ'];
+  const POLL_MS = 2200;
+
+  // ---- ストレージ ----
+  const hasStorage = typeof window.storage?.get === 'function';
+  async function stGet(key) {
+    try { const r = await window.storage.get(key, true); return r ? JSON.parse(r.value) : null; }
+    catch { return null; }
+  }
+  async function stSet(key, obj) {
+    try { await window.storage.set(key, JSON.stringify(obj), true); return true; }
+    catch { return false; }
+  }
+
+  if (!hasStorage) {
+    document.querySelector('#titleScreen .note').textContent =
+      '⚠️ この環境では共有ストレージが使えないため、通信対戦ができません。Claudeのアーティファクトとして開いてください。';
+    $('hostBtn').disabled = true;
+    $('joinModeBtn').disabled = true;
+  }
+
+  // ---- 乱数(シード共有で両者同じ展開に) ----
+  function hashStr(s) {
+    let h = 1779033703;
+    for (let i = 0; i < s.length; i++) {
+      h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return h >>> 0;
+  }
+  function mulberry32(a) {
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function roundPlan(seed, match, round) {
+    const rng = mulberry32(hashStr(`${seed}:m${match}:r${round}`));
+    const wait = 2000 + rng() * 3200;
+    const feints = [];
+    const n = rng() < 0.5 ? 1 : (rng() < 0.35 ? 2 : 0);
+    for (let i = 0; i < n; i++) {
+      feints.push({ at: 700 + rng() * (wait - 1600), text: FEINTS[Math.floor(rng() * FEINTS.length)] });
+    }
+    feints.sort((a, b) => a.at - b.at);
+    return { wait, feints };
+  }
+
+  // ---- 対戦状態 ----
+  let role = null;          // 'p1' | 'p2'
+  let roomCode = null;
+  let seed = null;
+  let match = 1;
+  let myResults = {};       // {'m1:r1': {ms} or {foul:true} or {miss:true}}
+  let foeResults = {};
+  let myRematch = 1, foeRematch = 1;
+  let pollTimer = null;
+  let phase = 'idle';       // idle / armed / signal / submitted / reveal / done
+  let tallyRecordedForMatch = -1;
+  let armTimers = [];
+  let signalAt = 0;
+  let revealShownFor = null;
+
+  const myKey = () => `gekkaduel:${roomCode}:${role}`;
+  const foeKey = () => `gekkaduel:${roomCode}:${role === 'p1' ? 'p2' : 'p1'}`;
+  const metaKey = () => `gekkaduel:${roomCode}:meta`;
+
+  async function saveMine() {
+    await stSet(myKey(), { joined: true, results: myResults, rematch: myRematch, at: Date.now() });
+  }
+
+  // ---- タイトル ----
+  $('hostBtn').addEventListener('click', async () => {
+    role = 'p1';
+    // 空きコードを探す
+    for (let i = 0; i < 6; i++) {
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      const meta = await stGet(`gekkaduel:${code}:meta`);
+      if (!meta || Date.now() - meta.at > 2 * 3600 * 1000) { roomCode = code; break; }
+    }
+    if (!roomCode) { alert('部屋を作れませんでした。もう一度お試しください。'); return; }
+    seed = String(Math.floor(Math.random() * 1e9));
+    myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
+    await stSet(metaKey(), { seed, at: Date.now() });
+    await saveMine();
+    $('roomCodeDisplay').textContent = roomCode;
+    show('hostScreen');
+    startPolling();
+  });
+
+  $('joinModeBtn').addEventListener('click', () => { $('joinErr').textContent = ''; show('joinScreen'); });
+  $('joinCancelBtn').addEventListener('click', () => show('titleScreen'));
+  $('hostCancelBtn').addEventListener('click', () => { stopPolling(); roomCode = null; show('titleScreen'); });
+
+  $('joinBtn').addEventListener('click', async () => {
+    const code = $('codeInput').value.trim();
+    if (!/^\d{4}$/.test(code)) { $('joinErr').textContent = '4桁の数字を入れてください'; return; }
+    $('joinErr').textContent = '部屋をさがしている……';
+    const meta = await stGet(`gekkaduel:${code}:meta`);
+    if (!meta) { $('joinErr').textContent = 'その部屋は見つからなかった'; return; }
+    role = 'p2';
+    roomCode = code;
+    seed = meta.seed;
+    myResults = {}; foeResults = {}; match = 1; myRematch = 1; foeRematch = 1;
+    await saveMine();
+    enterDuel();
+    startPolling();
+  });
+
+  // ---- ポーリング ----
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(poll, POLL_MS);
+    poll();
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  async function poll() {
+    if (!roomCode) return;
+    const foe = await stGet(foeKey());
+    if (!foe) return;
+    foeResults = foe.results || {};
+    foeRematch = foe.rematch || 1;
+
+    // ホスト:相手が来たら開戦
+    if ($('hostScreen').classList.contains('on') && foe.joined) enterDuel();
+    onStateUpdate();
+  }
+
+  // ---- 進行ロジック(両端末で決定的に同じ計算)----
+  function rk(r) { return `m${match}:r${r}`; }
+
+  function computeMatch() {
+    let s1 = 0, s2 = 0, r = 1;
+    const history = [];
+    while (true) {
+      const a = myResults[rk(r)], b = foeResults[rk(r)];
+      if (!a || !b) return { score: role === 'p1' ? [s1, s2] : [s1, s2], nextRound: r, done: false, history };
+      const w = judge(role === 'p1' ? a : b, role === 'p1' ? b : a); // p1視点
+      if (w === 1) s1++; else if (w === 2) s2++;
+      history.push({ r, w, a, b });
+      if (s1 >= WIN_SCORE || s2 >= WIN_SCORE) {
+        return { score: [s1, s2], nextRound: r + 1, done: true, winner: s1 >= WIN_SCORE ? 1 : 2, history };
+      }
+      r++;
+    }
+  }
+
+  // p1の結果, p2の結果 → 勝者(0=引き分けやり直し)
+  function judge(r1, r2) {
+    const bad1 = r1.foul, bad2 = r2.foul;
+    if (bad1 && bad2) return 0;
+    if (bad1) return 2;
+    if (bad2) return 1;
+    const m1 = r1.miss ? Infinity : r1.ms;
+    const m2 = r2.miss ? Infinity : r2.ms;
+    if (m1 === m2) return 0;
+    return m1 < m2 ? 1 : 2;
+  }
+
+  function myScoreView(st) {
+    const [s1, s2] = st.score;
+    return role === 'p1' ? [s1, s2] : [s2, s1];
+  }
+
+  // ---- 対戦画面 ----
+  const arena = $('arena');
+  const arenaText = $('arenaText');
+  const arenaSub = $('arenaSub');
+  const armBtn = $('armBtn');
+
+  function enterDuel() {
+    $('youName').textContent = role === 'p1' ? '青の侍' : '紅の侍';
+    $('foeName').textContent = role === 'p1' ? '紅の侍' : '青の侍';
+    show('duelScreen');
+    phase = 'idle';
+    renderIdle();
+    onStateUpdate();
+  }
+
+  function lanStr(n, mirror) {
+    const s = '●'.repeat(n) + '○'.repeat(WIN_SCORE - n);
+    return mirror ? s.split('').reverse().join('') : s;
+  }
+
+  function renderHud(st) {
+    const [me, foe] = myScoreView(st);
+    $('youLan').textContent = lanStr(me, false);
+    $('foeLan').textContent = lanStr(foe, true);
+    $('roundInfo').textContent = `第 ${st.nextRound} 回戦`;
+  }
+
+  function renderIdle() {
+    arena.classList.remove('signal-bg');
+    arenaText.className = 'a-text waiting';
+    arenaText.textContent = '';
+    arenaSub.textContent = '「構える」を押すと勝負がはじまる';
+    armBtn.style.display = '';
+  }
+
+  function clearArmTimers() {
+    for (const t of armTimers) clearTimeout(t);
+    armTimers = [];
+  }
+
+  armBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const st = computeMatch();
+    if (st.done) return;
+    const plan = roundPlan(seed, match, st.nextRound);
+    phase = 'armed';
+    armBtn.style.display = 'none';
+    arenaSub.textContent = 'まだだ……まだ、動くな……';
+    arenaText.className = 'a-text waiting';
+    arenaText.textContent = '構え……';
+    clearArmTimers();
+    for (const f of plan.feints) {
+      armTimers.push(setTimeout(() => {
+        if (phase !== 'armed') return;
+        arenaText.className = 'a-text feint';
+        arenaText.textContent = f.text;
+        armTimers.push(setTimeout(() => {
+          if (phase !== 'armed') return;
+          arenaText.className = 'a-text waiting';
+          arenaText.textContent = '構え……';
+        }, 900));
+      }, f.at));
+    }
+    armTimers.push(setTimeout(() => {
+      if (phase !== 'armed') return;
+      phase = 'signal';
+      signalAt = performance.now();
+      arena.classList.add('signal-bg');
+      arenaText.className = 'a-text slash';
+      arenaText.textContent = '斬!';
+      arenaSub.textContent = '';
+      // 見送り(2.5秒)
+      armTimers.push(setTimeout(() => {
+        if (phase !== 'signal') return;
+        submitResult({ miss: true });
+        arenaText.className = 'a-text result';
+        arenaText.innerHTML = '見送った……<small>太刀を振れなかった</small>';
+      }, 2500));
+    }, plan.wait));
+  });
+
+  arena.addEventListener('pointerdown', () => {
+    if (phase === 'armed') {
+      clearArmTimers();
+      submitResult({ foul: true });
+      arena.classList.add('flash');
+      setTimeout(() => arena.classList.remove('flash'), 400);
+      arenaText.className = 'a-text result';
+      arenaText.innerHTML = 'お手つき!<small>気配に釣られてしまった……</small>';
+      arenaSub.textContent = '';
+    } else if (phase === 'signal') {
+      const ms = Math.round(performance.now() - signalAt);
+      clearArmTimers();
+      submitResult({ ms });
+      arena.classList.remove('signal-bg');
+      arena.classList.add('flash');
+      setTimeout(() => arena.classList.remove('flash'), 400);
+      arenaText.className = 'a-text result';
+      arenaText.innerHTML = `一閃 — ${ms} ms<small>相手の太刀を待っている……</small>`;
+    }
+  });
+
+  async function submitResult(res) {
+    const st = computeMatch();
+    myResults[rk(st.nextRound)] = res;
+    phase = 'submitted';
+    await saveMine();
+    poll();
+  }
+
+  function onStateUpdate() {
+    if (!$('duelScreen').classList.contains('on') && !$('endScreen').classList.contains('on')) return;
+
+    // 再戦の合意チェック
+    const agreed = Math.min(myRematch, foeRematch);
+    if (agreed > match) {
+      match = agreed;
+      revealShownFor = null;
+      phase = 'idle';
+      enterDuel();
+      return;
+    }
+
+    const st = computeMatch();
+    renderHud(st);
+
+    if (st.done) {
+      if (phase !== 'done') {
+        phase = 'done';
+        showEnd(st);
+      }
+      return;
+    }
+
+    // 相手の結果がそろって新しい判定が出たら見せる
+    if (phase === 'submitted') {
+      const last = st.history[st.history.length - 1];
+      const lastKey = last ? `m${match}:r${last.r}` : null;
+      const waitingRound = Object.keys(myResults).filter(k => k.startsWith(`m${match}:`)).length;
+      if (last && lastKey !== revealShownFor && st.nextRound > waitingRound) {
+        revealShownFor = lastKey;
+        showReveal(last, st);
+      } else if (!last || st.nextRound <= waitingRound) {
+        arenaSub.textContent = '相手の太刀を待っている……';
+      }
+    }
+  }
+
+  function showReveal(entry, st) {
+    phase = 'reveal';
+    const mine = role === 'p1' ? entry.a : entry.b;
+    const theirs = role === 'p1' ? entry.b : entry.a;
+    const iWon = (entry.w === 1 && role === 'p1') || (entry.w === 2 && role === 'p2');
+    const fmt = r => r.foul ? 'お手つき' : r.miss ? '見送り' : `${r.ms} ms`;
+
+    arena.classList.remove('signal-bg');
+    arenaText.className = 'a-text result';
+    if (entry.w === 0) {
+      arenaText.innerHTML = `引き分け<small>あなた ${fmt(mine)} / あいて ${fmt(theirs)} — 仕切り直し</small>`;
+    } else if (iWon) {
+      arenaText.innerHTML = `一本!<small>あなた ${fmt(mine)} / あいて ${fmt(theirs)}</small>`;
+    } else {
+      arenaText.innerHTML = `取られた……<small>あなた ${fmt(mine)} / あいて ${fmt(theirs)}</small>`;
+    }
+    arenaSub.textContent = '';
+    setTimeout(() => {
+      const now = computeMatch();
+      if (now.done) { phase = 'done'; showEnd(now); return; }
+      phase = 'idle';
+      renderIdle();
+      renderHud(now);
+    }, 2400);
+  }
+
+  function showEnd(st) {
+    const [me, foe] = myScoreView(st);
+    const iWon = me >= WIN_SCORE;
+    $('endTitle').textContent = iWon ? 'あなたの勝利!' : 'あなたの敗北……';
+    $('endTitle').style.color = iWon ? 'var(--gold)' : '#9fb0d8';
+    const myMs = [], foeMs = [];
+    for (const h of st.history) {
+      const mine = role === 'p1' ? h.a : h.b;
+      const theirs = role === 'p1' ? h.b : h.a;
+      if (mine.ms) myMs.push(mine.ms);
+      if (theirs.ms) foeMs.push(theirs.ms);
+    }
+    const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) + ' ms' : '—';
+    $('endStats').innerHTML = `${me} 本 − ${foe} 本<br>あなたの平均反応 ${avg(myMs)} / あいての平均反応 ${avg(foeMs)}`;
+    if (tallyRecordedForMatch !== match) {
+      tallyRecordedForMatch = match;
+      Ranking.recordTally(GAME_KEY, iWon);
+    }
+    const tally = Ranking.getTally(GAME_KEY);
+    $('tallyBox').textContent = `通算成績 ${tally.wins}勝${tally.losses}敗(連勝 ${tally.streak} / 自己最高${tally.bestStreak}連勝)`;
+    $('rematchStatus').textContent = '';
+    $('rematchBtn').disabled = false;
+    show('endScreen');
+  }
+
+  $('rematchBtn').addEventListener('click', async () => {
+    myRematch = match + 1;
+    $('rematchBtn').disabled = true;
+    $('rematchStatus').textContent = '相手の返事を待っている……(相手も再戦を押すと開始)';
+    await saveMine();
+    poll();
+  });
+
+  $('exitBtn').addEventListener('click', () => {
+    stopPolling();
+    roomCode = null;
+    show('titleScreen');
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>夜店の金魚すくい</title>
+<style>
+  :root {
+    --night: #16223d;
+    --water: #1e4d6b;
+    --lantern: #ffd98a;
+    --ink: #f3efe6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: var(--night);
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; cursor: none; }
+
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 18px; pointer-events: none;
+  }
+  .score { font-size: 40px; font-weight: 700; line-height: 1; }
+  .score small { font-size: 14px; font-weight: 400; opacity: .75; margin-left: 4px; }
+  .right { text-align: right; }
+  .best { font-size: 13px; opacity: .75; margin-bottom: 6px; }
+  .poi-stock { font-size: 22px; letter-spacing: 4px; }
+
+  .paper-gauge {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    width: min(260px, 60vw); pointer-events: none;
+  }
+  .paper-gauge .label { font-size: 12px; opacity: .8; margin-bottom: 4px; text-align: center; }
+  .paper-gauge .bar {
+    height: 10px; border-radius: 999px; background: rgba(255,255,255,.15); overflow: hidden;
+  }
+  .paper-gauge .fill {
+    height: 100%; width: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #e0526b, #ffd98a);
+    transition: width .15s;
+  }
+
+  .overlay {
+    position: fixed; inset: 0; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 14px; text-align: center; padding: 24px;
+    background: rgba(15, 22, 42, .6);
+    backdrop-filter: blur(3px);
+    transition: opacity .3s;
+    cursor: auto;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay h1 { font-size: 38px; letter-spacing: .1em; font-weight: 700; }
+  .rules { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; line-height: 1.7; max-width: 28em; }
+  .rules div { background: rgba(255,255,255,.07); border-radius: 10px; padding: 9px 14px; }
+  .rules b { color: var(--lantern); }
+  .overlay .final { font-size: 62px; font-weight: 700; color: var(--lantern); line-height: 1; }
+  .overlay .tag { font-size: 16px; opacity: .85; }
+  .overlay p { font-size: 14px; line-height: 1.8; opacity: .9; }
+  button {
+    font: inherit; font-size: 17px; font-weight: 700;
+    color: #33251a; background: var(--lantern);
+    border: none; border-radius: 999px;
+    padding: 13px 42px; margin-top: 6px; cursor: pointer;
+    box-shadow: 0 4px 0 rgba(0,0,0,.25);
+  }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .hint { font-size: 13px; opacity: .6; }
+
+  .catch-pop {
+    position: fixed; font-size: 19px; font-weight: 700; color: var(--lantern);
+    text-shadow: 0 2px 8px rgba(0,0,0,.5);
+    pointer-events: none; animation: rise .9s ease-out forwards;
+    transform: translate(-50%, -50%);
+  }
+  .catch-pop.rare { font-size: 26px; color: #ffe9b0; }
+  .catch-pop.bad { color: #9fb6c9; font-size: 15px; }
+  @keyframes rise {
+    0%   { opacity: 0; margin-top: 8px; }
+    20%  { opacity: 1; margin-top: 0; }
+    100% { opacity: 0; margin-top: -30px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .catch-pop { animation: none; opacity: 1; }
+    .overlay { transition: none; }
+    .paper-gauge .fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;bottom:14px;left:14px;z-index:99999;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;background:rgba(11,15,28,0.72);border:1px solid rgba(246,201,119,0.35);color:#f6c877;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:12.5px;letter-spacing:0.04em;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,0.35);">← 遊戯場へ戻る</a>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="score"><span id="score">0</span><small>点</small></div>
+  <div class="right">
+    <div class="best">じこベスト <span id="best">0</span> 点</div>
+    <div class="poi-stock" id="poiStock">🥤🥤🥤</div>
+  </div>
+</div>
+
+<div class="paper-gauge">
+  <div class="label">ポイの紙</div>
+  <div class="bar"><div class="fill" id="paperFill"></div></div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h1>夜店の金魚すくい</h1>
+  <div class="rank-side-layout">
+    <div class="rank-side-left">
+      <div class="rules">
+        <div>🫧 <b>押している間</b>、ポイが水に沈む。指やマウスを離すと <b>すくい上げる</b>。</div>
+        <div>🐟 ポイの輪の中にいた金魚をゲット。ただし重い魚ほど <b>紙が破れる</b>。</div>
+        <div>💨 水の中で <b>速く動かすと紙が傷む</b>。そーっと近づいて、さっとすくうのがコツ。</div>
+        <div>👑 黒い出目金は3点、金色の錦鯉は10点。でも重くて暴れるぞ。</div>
+        <div>🥤 ポイは3枚。ぜんぶ破れたらおしまい。</div>
+      </div>
+      <button id="startBtn">はじめる</button>
+      <div class="hint">マウス / 指 でポイを動かす</div>
+    </div>
+    <div class="rank-side-right">
+      <div id="startRankBox"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <div class="tag">きろく</div>
+  <div class="final"><span id="finalScore">0</span>点</div>
+  <p id="endMsg"></p>
+  <div id="rankBox"></div>
+  <button id="retryBtn">もういちど</button>
+</div>
+
+<script src="ranking.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const poiStockEl = document.getElementById('poiStock');
+  const paperFill = document.getElementById('paperFill');
+  const startOverlay = document.getElementById('startOverlay');
+  const endOverlay = document.getElementById('endOverlay');
+  const finalScoreEl = document.getElementById('finalScore');
+  const endMsgEl = document.getElementById('endMsg');
+
+  let W, H, dpr;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const POI_R = 46;
+  const MOVE_DAMAGE = 0.16;   // 水中移動1pxあたりのダメージ
+  const FISH_TYPES = {
+    red:    { pts: 1,  weight: 10, speed: 1.2, size: 13, rarity: .70, label: '金魚 +1' },
+    black:  { pts: 3,  weight: 22, speed: 1.5, size: 16, rarity: .24, label: '出目金 +3' },
+    golden: { pts: 10, weight: 45, speed: 2.2, size: 22, rarity: .06, label: '✨錦鯉 +10✨' },
+  };
+
+  const GAME_KEY = 'kingyo-sukui';
+
+  let fishes, ripples, bubbles, caughtAnims;
+  let poi, score, best, playing, poiLeft, paperHP;
+
+  best = Ranking.getBest(GAME_KEY);
+  bestEl.textContent = best;
+  Ranking.mount('startRankBox', GAME_KEY, { unit: '点' });
+
+  function fishColor(type) {
+    return type === 'red' ? '#e8503f' : type === 'black' ? '#3b3440' : '#f0b944';
+  }
+
+  function spawnFish(type) {
+    if (!type) {
+      const r = Math.random();
+      type = r < FISH_TYPES.golden.rarity ? 'golden'
+           : r < FISH_TYPES.golden.rarity + FISH_TYPES.black.rarity ? 'black' : 'red';
+    }
+    const spec = FISH_TYPES[type];
+    fishes.push({
+      type,
+      x: Math.random() * W,
+      y: H * 0.28 + Math.random() * (H * 0.6),
+      a: Math.random() * Math.PI * 2,
+      turn: 0,
+      speed: spec.speed * (0.8 + Math.random() * 0.4),
+      size: spec.size,
+      wig: Math.random() * Math.PI * 2,
+      panic: 0,
+    });
+  }
+
+  function reset() {
+    score = 0;
+    poiLeft = 3;
+    paperHP = 100;
+    fishes = [];
+    ripples = [];
+    bubbles = [];
+    caughtAnims = [];
+    poi = { x: W / 2, y: H / 2, px: W / 2, py: H / 2, dipped: false, broken: 0 };
+    for (let i = 0; i < 14; i++) spawnFish();
+    scoreEl.textContent = '0';
+    updateHud();
+  }
+
+  function updateHud() {
+    poiStockEl.textContent = '🥤'.repeat(Math.max(0, poiLeft));
+    paperFill.style.width = Math.max(0, paperHP) + '%';
+  }
+
+  function damagePaper(amount) {
+    if (!playing || poi.broken > 0) return;
+    paperHP -= amount;
+    updateHud();
+    if (paperHP <= 0) {
+      poiLeft--;
+      poi.broken = 1;
+      showPop(poi.x, poi.y - 30, '破れた…', 'bad');
+      ripple(poi.x, poi.y, 2);
+      updateHud();
+      if (poiLeft <= 0) {
+        playing = false;
+        setTimeout(endGame, 900);
+      } else {
+        setTimeout(() => { paperHP = 100; poi.broken = 0; updateHud(); }, 900);
+      }
+    }
+  }
+
+  function dip() {
+    if (!playing || poi.dipped || poi.broken > 0) return;
+    poi.dipped = true;
+    ripple(poi.x, poi.y, 1);
+  }
+
+  function lift() {
+    if (!playing || !poi.dipped) return;
+    poi.dipped = false;
+    if (poi.broken > 0) return;
+    ripple(poi.x, poi.y, 1.4);
+
+    // ポイの中の魚をすくう
+    const caught = [];
+    fishes = fishes.filter(f => {
+      const d = Math.hypot(f.x - poi.x, f.y - poi.y);
+      if (d < POI_R - f.size * 0.4) { caught.push(f); return false; }
+      return true;
+    });
+
+    if (caught.length === 0) return;
+
+    let totalWeight = 0, totalPts = 0;
+    for (const f of caught) {
+      const spec = FISH_TYPES[f.type];
+      totalWeight += spec.weight;
+      totalPts += spec.pts;
+      caughtAnims.push({ x: f.x, y: f.y, type: f.type, t: 0, size: f.size });
+      showPop(f.x, f.y - 20, spec.label, f.type === 'golden' ? 'rare' : '');
+      spawnFish(); // 補充
+    }
+    if (caught.length >= 2) {
+      totalPts += caught.length; // まとめ捕りボーナス
+      showPop(poi.x, poi.y - 55, `まとめ捕り +${caught.length}`, 'rare');
+    }
+    score += totalPts;
+    scoreEl.textContent = score;
+    damagePaper(totalWeight);
+  }
+
+  function ripple(x, y, s) {
+    ripples.push({ x, y, r: 8, s, a: 0.7 });
+  }
+
+  function showPop(x, y, text, cls) {
+    const el = document.createElement('div');
+    el.className = 'catch-pop' + (cls ? ' ' + cls : '');
+    el.textContent = text;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+  }
+
+  function endGame() {
+    finalScoreEl.textContent = score;
+    const prevBest = best;
+    const result = Ranking.record(GAME_KEY, score);
+    best = result.best;
+    bestEl.textContent = best;
+    if (score > prevBest) {
+      endMsgEl.textContent = 'じこベスト更新!屋台のおじさんもびっくり。';
+    } else if (score >= 40) {
+      endMsgEl.textContent = '名人の手さばき。金魚が観念している。';
+    } else if (score >= 15) {
+      endMsgEl.textContent = 'なかなかの腕前。錦鯉は狙えたか?';
+    } else {
+      endMsgEl.textContent = 'そーっと近づいて、さっとすくう。それだけさ。';
+    }
+    Ranking.mount('rankBox', GAME_KEY, { unit: '点', highlightDate: result.entry.date });
+    endOverlay.classList.remove('hidden');
+  }
+
+  function start() {
+    startOverlay.classList.add('hidden');
+    endOverlay.classList.add('hidden');
+    reset();
+    playing = true;
+  }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+
+  canvas.addEventListener('pointermove', e => {
+    poi.x = e.clientX; poi.y = e.clientY;
+  });
+  canvas.addEventListener('pointerdown', e => {
+    poi.x = e.clientX; poi.y = e.clientY;
+    poi.px = poi.x; poi.py = poi.y;
+    dip();
+  });
+  window.addEventListener('pointerup', lift);
+  window.addEventListener('pointercancel', lift);
+
+  // ---- 描画 ----
+  const lanternGlows = Array.from({ length: 5 }, (_, i) => ({
+    x: (i + 0.5) / 5, sway: Math.random() * Math.PI * 2
+  }));
+
+  let t = 0;
+  function frame() {
+    t += 1 / 60;
+
+    // 背景:夜空と提灯
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.22);
+    sky.addColorStop(0, '#16223d');
+    sky.addColorStop(1, '#1c3050');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H * 0.22);
+
+    for (const l of lanternGlows) {
+      const lx = l.x * W + Math.sin(t * 1.4 + l.sway) * 4;
+      const ly = H * 0.07;
+      ctx.fillStyle = 'rgba(255, 190, 100, .18)';
+      ctx.beginPath(); ctx.arc(lx, ly, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8503f';
+      ctx.beginPath(); ctx.ellipse(lx, ly, 11, 14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255, 220, 150, .8)';
+      ctx.beginPath(); ctx.ellipse(lx, ly, 5, 8, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 水面
+    const water = ctx.createLinearGradient(0, H * 0.22, 0, H);
+    water.addColorStop(0, '#255a7d');
+    water.addColorStop(1, '#153a54');
+    ctx.fillStyle = water;
+    ctx.fillRect(0, H * 0.22, W, H);
+
+    // 水面のゆらめき
+    ctx.strokeStyle = 'rgba(255,255,255,.06)';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      const yy = H * 0.3 + i * H * 0.14;
+      for (let x = 0; x <= W; x += 24) {
+        const y = yy + Math.sin(x * 0.02 + t * 1.6 + i * 2) * 4;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // 泡
+    if (Math.random() < 0.06) {
+      bubbles.push({ x: Math.random() * W, y: H + 10, r: 2 + Math.random() * 3, v: 0.4 + Math.random() * 0.5 });
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    for (const b of bubbles) {
+      b.y -= b.v;
+      b.x += Math.sin(t * 2 + b.y * 0.05) * 0.3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    }
+    bubbles = bubbles.filter(b => b.y > H * 0.24);
+
+    // 魚の挙動
+    for (const f of fishes) {
+      // ポイが沈んでいると逃げる
+      if (poi.dipped && poi.broken === 0) {
+        const d = Math.hypot(f.x - poi.x, f.y - poi.y);
+        if (d < 130) {
+          const away = Math.atan2(f.y - poi.y, f.x - poi.x);
+          const urgency = (130 - d) / 130;
+          f.a += angleDiff(f.a, away) * 0.15 * urgency;
+          f.panic = Math.min(1, f.panic + urgency * 0.1);
+        }
+      }
+      f.panic = Math.max(0, f.panic - 0.01);
+      f.turn += (Math.random() - .5) * 0.06;
+      f.turn *= 0.95;
+      f.a += f.turn;
+      const sp = f.speed * (1 + f.panic * 2.2);
+      f.x += Math.cos(f.a) * sp;
+      f.y += Math.sin(f.a) * sp;
+
+      // 池の縁で曲がる
+      if (f.x < 20) f.a = 0 + (Math.random() - .5);
+      if (f.x > W - 20) f.a = Math.PI + (Math.random() - .5);
+      if (f.y < H * 0.26) f.a = Math.PI / 2 + (Math.random() - .5);
+      if (f.y > H - 20) f.a = -Math.PI / 2 + (Math.random() - .5);
+
+      drawFish(f);
+    }
+
+    // すくった魚のアニメ(上に消えていく)
+    for (const c of caughtAnims) {
+      c.t += 1 / 60;
+      const y = c.y - c.t * 90;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - c.t * 1.4);
+      ctx.translate(c.x, y);
+      ctx.rotate(Math.sin(c.t * 20) * 0.4);
+      drawFishBody(c.type, c.size);
+      ctx.restore();
+    }
+    caughtAnims = caughtAnims.filter(c => c.t < 0.8);
+
+    // 波紋
+    for (const r of ripples) {
+      r.r += 1.8 * r.s;
+      r.a -= 0.02;
+      ctx.strokeStyle = `rgba(255,255,255,${Math.max(0, r.a)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(r.x, r.y, r.r, r.r * 0.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ripples = ripples.filter(r => r.a > 0);
+
+    // 水中移動ダメージ
+    if (playing && poi.dipped && poi.broken === 0) {
+      const moved = Math.hypot(poi.x - poi.px, poi.y - poi.py);
+      if (moved > 2) damagePaper((moved - 2) * MOVE_DAMAGE);
+      if (moved > 6 && Math.random() < 0.5) ripple(poi.x, poi.y, 0.5);
+    }
+    poi.px = poi.x; poi.py = poi.y;
+
+    // ポイ
+    if (playing) drawPoi();
+
+    requestAnimationFrame(frame);
+  }
+
+  function angleDiff(from, to) {
+    let d = to - from;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
+  function drawFishBody(type, size) {
+    ctx.fillStyle = fishColor(type);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size, size * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 尾びれ
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.8, 0);
+    ctx.quadraticCurveTo(-size * 1.7, -size * 0.7, -size * 1.5, 0);
+    ctx.quadraticCurveTo(-size * 1.7, size * 0.7, -size * 0.8, 0);
+    ctx.fill();
+    if (type === 'golden') {
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.beginPath();
+      ctx.ellipse(size * 0.2, -size * 0.15, size * 0.4, size * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 目
+    ctx.fillStyle = '#fff';
+    const eyeR = type === 'black' ? size * 0.28 : size * 0.18;
+    ctx.beginPath(); ctx.arc(size * 0.55, -size * 0.18, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(size * 0.6, -size * 0.18, eyeR * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawFish(f) {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.a);
+    ctx.rotate(Math.sin(t * 8 + f.wig) * 0.08);
+    // 影
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath();
+    ctx.ellipse(2, f.size * 0.5, f.size, f.size * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    drawFishBody(f.type, f.size);
+    ctx.restore();
+  }
+
+  function drawPoi() {
+    ctx.save();
+    ctx.translate(poi.x, poi.y);
+    const dipScale = poi.dipped ? 0.92 : 1;
+    ctx.scale(dipScale, dipScale);
+
+    // 柄
+    ctx.strokeStyle = '#c9873f';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(POI_R * 0.75, POI_R * 0.75);
+    ctx.lineTo(POI_R * 1.7, POI_R * 1.7);
+    ctx.stroke();
+
+    // 紙(HPで透けて、破れていく)
+    if (poi.broken === 0) {
+      const hp = Math.max(0, paperHP) / 100;
+      ctx.fillStyle = `rgba(250, 246, 238, ${0.25 + hp * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, POI_R - 4, 0, Math.PI * 2);
+      ctx.fill();
+      // 破れ目
+      if (hp < 0.66) {
+        ctx.strokeStyle = 'rgba(60, 70, 90, .5)';
+        ctx.lineWidth = 1.5;
+        const cracks = Math.floor((1 - hp) * 6);
+        for (let i = 0; i < cracks; i++) {
+          const a = i * 2.4 + 0.7;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * POI_R * 0.2, Math.sin(a) * POI_R * 0.2);
+          ctx.lineTo(Math.cos(a + .4) * POI_R * 0.75, Math.sin(a + .4) * POI_R * 0.75);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 枠
+    ctx.strokeStyle = poi.broken ? '#7a4a4a' : '#d8433f';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(0, 0, POI_R, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 沈んでいる表示
+    if (poi.dipped && poi.broken === 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, POI_R + 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  reset();
+  playing = false;
+  frame();
+})();
+</script>
+</body>
+</html>

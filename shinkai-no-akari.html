@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>深海ノ灯</title>
+<style>
+  :root {
+    --abyss: #030710;
+    --glow: #7ee8d8;
+    --ink: #d8e6ea;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: var(--abyss);
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; }
+
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 18px; pointer-events: none;
+  }
+  .depth { font-size: 38px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .depth small { font-size: 14px; font-weight: 400; opacity: .7; margin-left: 3px; }
+  .best { font-size: 13px; opacity: .7; text-align: right; }
+
+  .light-gauge {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    width: min(240px, 56vw); pointer-events: none;
+  }
+  .light-gauge .label { font-size: 11px; opacity: .7; margin-bottom: 4px; text-align: center; letter-spacing: .2em; }
+  .light-gauge .bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .light-gauge .fill {
+    height: 100%; width: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #2b6b78, var(--glow));
+    box-shadow: 0 0 10px rgba(126, 232, 216, .5);
+    transition: width .2s;
+  }
+
+  .zone-msg {
+    position: fixed; top: 26%; left: 50%; transform: translateX(-50%);
+    font-size: 17px; letter-spacing: .3em; color: rgba(216, 230, 234, .85);
+    text-shadow: 0 0 14px rgba(126, 232, 216, .4);
+    pointer-events: none; white-space: nowrap;
+    opacity: 0; animation: fadeMsg 3.2s ease forwards;
+  }
+  @keyframes fadeMsg {
+    0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; }
+  }
+
+  .overlay {
+    position: fixed; inset: 0; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 14px; text-align: center; padding: 24px;
+    background: rgba(2, 5, 12, .72);
+    backdrop-filter: blur(3px);
+    transition: opacity .4s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay h1 { font-size: 40px; letter-spacing: .3em; font-weight: 700; text-shadow: 0 0 24px rgba(126,232,216,.35); }
+  .rules { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; line-height: 1.7; max-width: 28em; }
+  .rules div { background: rgba(126, 232, 216, .06); border: 1px solid rgba(126,232,216,.12); border-radius: 10px; padding: 9px 14px; }
+  .rules b { color: var(--glow); }
+  .overlay .final { font-size: 58px; font-weight: 700; color: var(--glow); line-height: 1; text-shadow: 0 0 24px rgba(126,232,216,.4); }
+  .overlay .tag { font-size: 15px; opacity: .8; letter-spacing: .2em; }
+  .overlay p { font-size: 14px; line-height: 1.8; opacity: .9; }
+  button {
+    font: inherit; font-size: 16px; font-weight: 700;
+    color: #042222; background: var(--glow);
+    border: none; border-radius: 999px;
+    padding: 13px 44px; margin-top: 6px; cursor: pointer;
+    box-shadow: 0 0 22px rgba(126, 232, 216, .45);
+  }
+  button:active { transform: translateY(2px); }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .hint { font-size: 12px; opacity: .55; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .overlay { transition: none; }
+    .light-gauge .fill { transition: none; }
+    .zone-msg { animation-duration: 2s; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;bottom:14px;left:14px;z-index:99999;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;background:rgba(11,15,28,0.72);border:1px solid rgba(246,201,119,0.35);color:#f6c877;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:12.5px;letter-spacing:0.04em;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,0.35);">← 遊戯場へ戻る</a>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="depth"><span id="depth">0</span><small>m</small></div>
+  <div class="best">さいしん記録<br><span id="best">0</span> m</div>
+</div>
+
+<div class="light-gauge">
+  <div class="label">ヒカリ</div>
+  <div class="bar"><div class="fill" id="lightFill"></div></div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h1>深海ノ灯</h1>
+  <div class="rank-side-layout">
+    <div class="rank-side-left">
+      <div class="rules">
+        <div>🌊 小さな潜水艇は、ひとりでに沈んでいく。<b>マウス / 指</b> で左右にあやつれ。</div>
+        <div>💡 灯りは少しずつ弱っていく。暗闇では、岩も生きものも見えなくなる。</div>
+        <div>✨ 光る <b>夜光プランクトン</b> を集めれば、灯りがよみがえる。</div>
+        <div>🪨 岩にぶつかったら、そこで旅は終わり。クラゲはそっと避けて。</div>
+        <div>🎣 深く潜ると…<b>向こうから light をともす何か</b>がいる。近づいてはいけない。</div>
+      </div>
+      <button id="startBtn">潜行開始</button>
+      <div class="hint">マウス / 指 で移動 (矢印キーでも操作可)</div>
+    </div>
+    <div class="rank-side-right">
+      <div id="startRankBox"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <div class="tag">とうたつ深度</div>
+  <div class="final"><span id="finalDepth">0</span>m</div>
+  <p id="endMsg"></p>
+  <div id="rankBox"></div>
+  <button id="retryBtn">もういちど潜る</button>
+</div>
+
+<script src="ranking.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const depthEl = document.getElementById('depth');
+  const bestEl = document.getElementById('best');
+  const lightFill = document.getElementById('lightFill');
+  const startOverlay = document.getElementById('startOverlay');
+  const endOverlay = document.getElementById('endOverlay');
+  const finalDepthEl = document.getElementById('finalDepth');
+  const endMsgEl = document.getElementById('endMsg');
+
+  let W, H, dpr;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const LIGHT_MAX = 280, LIGHT_MIN = 65, LIGHT_DECAY = 9;   // 毎秒
+  const ORB_LIGHT = 55;
+
+  const GAME_KEY = 'shinkai-no-akari';
+
+  let sub, camY, rocks, orbs, jellies, anglers, particles, sparks;
+  let light, depth, best, playing, dead, spawnedUntil, shownZones, keys = {};
+
+  best = Ranking.getBest(GAME_KEY);
+  bestEl.textContent = best;
+  Ranking.mount('startRankBox', GAME_KEY, { unit: 'm' });
+
+  const ZONES = [
+    { d: 200,  msg: '― 光がとどく最後の海 ―' },
+    { d: 500,  msg: '― トワイライトゾーン ―' },
+    { d: 900,  msg: '― ここから先は 永遠の夜 ―' },
+    { d: 1400, msg: '― 何かが こちらを見ている ―' },
+    { d: 2000, msg: '― 深海二〇〇〇米 よくぞここまで ―' },
+  ];
+
+  function reset() {
+    sub = { x: W / 2, y: 0, vx: 0, targetX: W / 2, tilt: 0 };
+    camY = -H * 0.35;
+    rocks = []; orbs = []; jellies = []; anglers = [];
+    particles = Array.from({ length: 70 }, () => ({
+      x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.8 + .4, v: Math.random() * .5 + .1
+    }));
+    sparks = [];
+    light = LIGHT_MAX;
+    depth = 0;
+    dead = false;
+    spawnedUntil = H;
+    shownZones = new Set();
+    depthEl.textContent = '0';
+    updateLightGauge();
+  }
+
+  function updateLightGauge() {
+    lightFill.style.width = Math.max(0, (light - LIGHT_MIN) / (LIGHT_MAX - LIGHT_MIN) * 100) + '%';
+  }
+
+  // ---- スポーン ----
+  function spawnAhead() {
+    while (spawnedUntil < camY + H * 2.5) {
+      const y = spawnedUntil;
+      const d = y / 10;
+
+      // 岩:左右の壁から突き出す
+      if (Math.random() < Math.min(0.75, 0.35 + d * 0.0004)) {
+        const fromLeft = Math.random() < 0.5;
+        const len = W * (0.18 + Math.random() * (0.22 + Math.min(0.18, d * 0.00008)));
+        const h = 46 + Math.random() * 60;
+        rocks.push({
+          x: fromLeft ? 0 : W - len,
+          y, w: len, h,
+          fromLeft,
+        });
+      }
+
+      // 夜光プランクトン
+      if (Math.random() < 0.7) {
+        orbs.push({
+          x: 40 + Math.random() * (W - 80),
+          y: y + Math.random() * 100,
+          r: 7,
+          tw: Math.random() * Math.PI * 2,
+          taken: false,
+        });
+      }
+
+      // クラゲ
+      if (d > 120 && Math.random() < 0.45) {
+        jellies.push({
+          x: 40 + Math.random() * (W - 80),
+          y: y + Math.random() * 100,
+          baseX: 0,
+          sway: Math.random() * Math.PI * 2,
+          r: 15 + Math.random() * 10,
+          rise: 0.25 + Math.random() * 0.3,
+        });
+      }
+
+      // チョウチンアンコウ:深部のみ
+      if (d > 380 && Math.random() < Math.min(0.3, 0.1 + d * 0.00008)) {
+        anglers.push({
+          x: Math.random() < 0.5 ? -30 : W + 30,
+          y: y + Math.random() * 100,
+          vx: 0, vy: 0,
+          r: 20,
+          lureT: Math.random() * Math.PI * 2,
+        });
+      }
+
+      spawnedUntil += 130;
+    }
+    // 通り過ぎたものを掃除
+    const cut = camY - H;
+    rocks = rocks.filter(r => r.y + r.h > cut);
+    orbs = orbs.filter(o => o.y > cut && !o.taken);
+    jellies = jellies.filter(j => j.y > cut - 200);
+    anglers = anglers.filter(a => a.y > cut - 200);
+  }
+
+  function die() {
+    if (dead) return;
+    dead = true;
+    for (let i = 0; i < 24; i++) {
+      sparks.push({
+        x: sub.x, y: sub.y,
+        vx: (Math.random() - .5) * 6, vy: (Math.random() - .5) * 6,
+        life: 1, r: 2 + Math.random() * 3,
+      });
+    }
+    setTimeout(() => { playing = false; endGame(); }, 1100);
+  }
+
+  function endGame() {
+    const d = Math.floor(depth);
+    finalDepthEl.textContent = d;
+    const prevBest = best;
+    const result = Ranking.record(GAME_KEY, d);
+    best = result.best;
+    bestEl.textContent = best;
+    if (d > prevBest) {
+      endMsgEl.textContent = '最深記録更新。深海があなたを覚えた。';
+    } else if (d >= 1400) {
+      endMsgEl.textContent = '「何か」の領域から生きて戻れる者は少ない。';
+    } else if (d >= 700) {
+      endMsgEl.textContent = '永遠の夜の入口まで来た。灯りを絶やすな。';
+    } else if (d >= 300) {
+      endMsgEl.textContent = '太陽の届かぬ場所へ。まだ序の口だ。';
+    } else {
+      endMsgEl.textContent = '海は深い。プランクトンの光をたどれ。';
+    }
+    Ranking.mount('rankBox', GAME_KEY, { unit: 'm', highlightDate: result.entry.date });
+    endOverlay.classList.remove('hidden');
+  }
+
+  function showZone(msg) {
+    const el = document.createElement('div');
+    el.className = 'zone-msg';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3300);
+  }
+
+  function start() {
+    startOverlay.classList.add('hidden');
+    endOverlay.classList.add('hidden');
+    reset();
+    playing = true;
+  }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+
+  canvas.addEventListener('pointermove', e => { sub.targetX = e.clientX; });
+  canvas.addEventListener('pointerdown', e => { sub.targetX = e.clientX; });
+  window.addEventListener('keydown', e => { keys[e.code] = true; });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // ---- メインループ ----
+  let t = 0;
+  function frame() {
+    t += 1 / 60;
+    const d = depth;
+
+    // 背景:深度で暗くなる
+    const darkness = Math.min(1, d / 900);
+    const topCol = lerpColor([10, 30, 55], [3, 7, 16], darkness);
+    const botCol = lerpColor([5, 14, 30], [1, 3, 8], darkness);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, `rgb(${topCol})`);
+    bg.addColorStop(1, `rgb(${botCol})`);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // マリンスノー
+    ctx.fillStyle = 'rgba(200, 220, 230, .25)';
+    for (const p of particles) {
+      p.y -= p.v * 2.5; // 相対的に上へ流れる(潜行感)
+      if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+      ctx.fillRect(p.x, p.y, p.s, p.s);
+    }
+
+    if (playing && !dead) {
+      // 沈降
+      const sinkSpeed = 2.2 + Math.min(2.6, d * 0.0015);
+      sub.y += sinkSpeed;
+      depth = sub.y / 10;
+
+      // 操作
+      if (keys.ArrowLeft) sub.targetX -= 7;
+      if (keys.ArrowRight) sub.targetX += 7;
+      sub.targetX = Math.max(24, Math.min(W - 24, sub.targetX));
+      const dx = sub.targetX - sub.x;
+      sub.vx += dx * 0.012;
+      sub.vx *= 0.86;
+      sub.x += sub.vx;
+      sub.tilt = Math.max(-0.4, Math.min(0.4, sub.vx * 0.05));
+
+      // 灯りの減衰
+      light = Math.max(LIGHT_MIN, light - LIGHT_DECAY / 60);
+      updateLightGauge();
+
+      depthEl.textContent = Math.floor(depth);
+
+      // ゾーン演出
+      for (const z of ZONES) {
+        if (depth >= z.d && !shownZones.has(z.d)) {
+          shownZones.add(z.d);
+          showZone(z.msg);
+        }
+      }
+    }
+
+    camY += ((sub.y - H * 0.35) - camY) * 0.1;
+    spawnAhead();
+
+    const sy = y => y - camY;
+
+    // ---- 岩 ----
+    for (const r of rocks) {
+      const y = sy(r.y);
+      if (y > H + 100 || y + r.h < -100) continue;
+      drawRock(r, y);
+      // 衝突
+      if (playing && !dead &&
+          sub.x > r.x - 12 && sub.x < r.x + r.w + 12 &&
+          sub.y > r.y - 12 && sub.y < r.y + r.h + 12) {
+        // 少し丸めた判定
+        const cx = Math.max(r.x, Math.min(sub.x, r.x + r.w));
+        const cy = Math.max(r.y, Math.min(sub.y, r.y + r.h));
+        if (Math.hypot(sub.x - cx, sub.y - cy) < 13) die();
+      }
+    }
+
+    // ---- プランクトン ----
+    for (const o of orbs) {
+      const y = sy(o.y);
+      if (y > H + 60 || y < -60) continue;
+      const glow = 0.6 + 0.4 * Math.sin(t * 3 + o.tw);
+      ctx.fillStyle = `rgba(126, 232, 216, ${0.14 * glow})`;
+      ctx.beginPath(); ctx.arc(o.x, y, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(190, 255, 244, ${0.9 * glow})`;
+      ctx.beginPath(); ctx.arc(o.x, y, o.r * (0.8 + glow * 0.3), 0, Math.PI * 2); ctx.fill();
+
+      if (playing && !dead && Math.hypot(sub.x - o.x, sub.y - o.y) < 26) {
+        o.taken = true;
+        light = Math.min(LIGHT_MAX, light + ORB_LIGHT);
+        updateLightGauge();
+        for (let i = 0; i < 8; i++) {
+          sparks.push({
+            x: o.x, y: o.y,
+            vx: (Math.random() - .5) * 3, vy: (Math.random() - .5) * 3,
+            life: 1, r: 1.5 + Math.random() * 2, glow: true,
+          });
+        }
+      }
+    }
+    orbs = orbs.filter(o => !o.taken);
+
+    // ---- クラゲ ----
+    for (const j of jellies) {
+      j.y -= j.rise;
+      const jx = j.x + Math.sin(t * 1.2 + j.sway) * 26;
+      const y = sy(j.y);
+      if (y > H + 80 || y < -80) continue;
+      drawJelly(jx, y, j.r, t + j.sway);
+      if (playing && !dead && Math.hypot(sub.x - jx, sub.y - j.y) < j.r + 9) die();
+    }
+
+    // ---- チョウチンアンコウ ----
+    for (const a of anglers) {
+      if (playing && !dead) {
+        // ゆっくりこちらへ寄ってくる
+        const ax = sub.x - a.x, ay = sub.y - a.y;
+        const dist = Math.hypot(ax, ay) || 1;
+        const pull = 0.018;
+        a.vx += (ax / dist) * pull;
+        a.vy += (ay / dist) * pull;
+        a.vx *= 0.985; a.vy *= 0.985;
+        a.x += a.vx; a.y += a.vy;
+      }
+      const y = sy(a.y);
+      if (y > H + 120 || y < -120) continue;
+      a.lureT += 1 / 60;
+      drawAngler(a, y);
+      if (playing && !dead && Math.hypot(sub.x - a.x, sub.y - a.y) < a.r + 8) die();
+    }
+
+    // ---- 潜水艇 ----
+    const subY = sy(sub.y);
+    if (!dead || sparks.length) drawSub(sub.x, subY, sub.tilt);
+
+    // ---- 暗闇のマスク ----
+    drawDarkness(sub.x, subY);
+
+    // ---- 暗闇の上に光るもの(発光体は闇でも見える)----
+    for (const o of orbs) {
+      const y = sy(o.y);
+      if (y > H + 60 || y < -60) continue;
+      const glow = 0.6 + 0.4 * Math.sin(t * 3 + o.tw);
+      ctx.fillStyle = `rgba(190, 255, 244, ${0.5 * glow})`;
+      ctx.beginPath(); ctx.arc(o.x, y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    for (const a of anglers) {
+      const y = sy(a.y);
+      if (y > H + 120 || y < -120) continue;
+      // 提灯だけが闇に浮かぶ
+      const lx = a.x + (a.vx > 0 ? 26 : -26);
+      const ly = y - 22 + Math.sin(a.lureT * 4) * 3;
+      const gl = 0.7 + 0.3 * Math.sin(a.lureT * 6);
+      ctx.fillStyle = `rgba(255, 240, 170, ${0.2 * gl})`;
+      ctx.beginPath(); ctx.arc(lx, ly, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255, 250, 210, ${0.95 * gl})`;
+      ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 火花
+    for (const s of sparks) {
+      s.x += s.vx; s.y += s.vy;
+      s.life -= 0.03;
+      ctx.fillStyle = s.glow
+        ? `rgba(190, 255, 244, ${Math.max(0, s.life)})`
+        : `rgba(255, 200, 140, ${Math.max(0, s.life)})`;
+      const sr = Math.max(0, s.r * s.life);
+      if (sr > 0) {
+        ctx.beginPath(); ctx.arc(s.x, sy(s.y), sr, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    sparks = sparks.filter(s => s.life > 0);
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---- 描画関数 ----
+  function lerpColor(a, b, k) {
+    return a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',');
+  }
+
+  function drawRock(r, y) {
+    ctx.fillStyle = '#1b2836';
+    ctx.beginPath();
+    if (r.fromLeft) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(r.w * 0.75, y + r.h * 0.25);
+      ctx.lineTo(r.w, y + r.h * 0.55);
+      ctx.lineTo(r.w * 0.7, y + r.h * 0.8);
+      ctx.lineTo(0, y + r.h);
+    } else {
+      ctx.moveTo(W, y);
+      ctx.lineTo(r.x + r.w * 0.25, y + r.h * 0.25);
+      ctx.lineTo(r.x, y + r.h * 0.55);
+      ctx.lineTo(r.x + r.w * 0.3, y + r.h * 0.8);
+      ctx.lineTo(W, y + r.h);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(126, 232, 216, .12)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  function drawJelly(x, y, r, ph) {
+    const pulse = 1 + Math.sin(ph * 2.4) * 0.08;
+    ctx.fillStyle = 'rgba(196, 150, 255, .22)';
+    ctx.beginPath(); ctx.arc(x, y, r * 1.5 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(214, 178, 255, .55)';
+    ctx.beginPath();
+    ctx.arc(x, y, r * pulse, Math.PI, 0);
+    ctx.quadraticCurveTo(x + r, y + r * 0.35, x + r * 0.7, y + r * 0.4);
+    ctx.lineTo(x - r * 0.7, y + r * 0.4);
+    ctx.quadraticCurveTo(x - r, y + r * 0.35, x - r * pulse, y);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(214, 178, 255, .4)';
+    ctx.lineWidth = 1.5;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x + i * r * 0.28, y + r * 0.38);
+      ctx.quadraticCurveTo(
+        x + i * r * 0.28 + Math.sin(ph * 3 + i) * 6,
+        y + r * 1.1,
+        x + i * r * 0.28 + Math.sin(ph * 3 + i + 1) * 8,
+        y + r * 1.7
+      );
+      ctx.stroke();
+    }
+  }
+
+  function drawAngler(a, y) {
+    const facing = a.vx >= 0 ? 1 : -1;
+    ctx.save();
+    ctx.translate(a.x, y);
+    ctx.scale(facing, 1);
+    // 体
+    ctx.fillStyle = '#241a2e';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, a.r * 1.15, a.r * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 尾
+    ctx.beginPath();
+    ctx.moveTo(-a.r * 0.9, 0);
+    ctx.lineTo(-a.r * 1.7, -a.r * 0.55);
+    ctx.lineTo(-a.r * 1.7, a.r * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    // 提灯の竿
+    ctx.strokeStyle = '#241a2e';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(a.r * 0.4, -a.r * 0.6);
+    ctx.quadraticCurveTo(a.r * 1.3, -a.r * 1.6, a.r * 1.3, -a.r * 1.1);
+    ctx.stroke();
+    // 口(ギザギザ)
+    ctx.strokeStyle = 'rgba(255, 250, 210, .5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const mx = a.r * (0.45 + i * 0.13);
+      ctx.moveTo(mx, a.r * 0.15);
+      ctx.lineTo(mx + a.r * 0.06, a.r * 0.42);
+    }
+    ctx.stroke();
+    // 目
+    ctx.fillStyle = 'rgba(255, 250, 210, .85)';
+    ctx.beginPath(); ctx.arc(a.r * 0.35, -a.r * 0.25, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSub(x, y, tilt) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(tilt);
+    // ヘッドライトビーム
+    if (!dead) {
+      const beam = ctx.createLinearGradient(0, 0, 0, 90);
+      beam.addColorStop(0, 'rgba(255, 244, 200, .18)');
+      beam.addColorStop(1, 'rgba(255, 244, 200, 0)');
+      ctx.fillStyle = beam;
+      ctx.beginPath();
+      ctx.moveTo(-7, 8);
+      ctx.lineTo(-26, 95);
+      ctx.lineTo(26, 95);
+      ctx.lineTo(7, 8);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // 船体
+    ctx.fillStyle = '#e8a13f';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 16, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 窓
+    ctx.fillStyle = '#9fe8ff';
+    ctx.beginPath(); ctx.arc(0, -1, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#b5731f';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // プロペラ(上)
+    ctx.strokeStyle = '#b5731f';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -11); ctx.lineTo(0, -17);
+    ctx.moveTo(-7 * Math.abs(Math.sin(t * 12)), -17);
+    ctx.lineTo(7 * Math.abs(Math.sin(t * 12)), -17);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawDarkness(x, y) {
+    ctx.save();
+    // 闇レイヤー
+    const dk = Math.min(0.92, 0.3 + (depth / 900) * 0.62);
+    ctx.fillStyle = `rgba(1, 3, 8, ${dk})`;
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 光の穴をあけるため一旦オフスクリーン的に:radial gradientで直接描く
+    const grad = ctx.createRadialGradient(x, y, light * 0.25, x, y, light);
+    grad.addColorStop(0, 'rgba(1, 3, 8, 0)');
+    grad.addColorStop(0.7, `rgba(1, 3, 8, ${dk * 0.55})`);
+    grad.addColorStop(1, `rgba(1, 3, 8, ${dk})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  reset();
+  playing = false;
+  frame();
+})();
+</script>
+</body>
+</html>
