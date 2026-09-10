@@ -200,11 +200,24 @@
       [6, 6, 3, 6, 9],
     ];
     if (i < table.length) return table[i];
-    const cols = 5 + Math.floor(Math.random() * 3);
-    const rows = 5 + Math.floor(Math.random() * 3);
-    const holes = 2 + Math.floor(Math.random() * 4);
-    const numbers = 4 + Math.floor(Math.random() * 3);
-    const walls = 5 + Math.floor(Math.random() * 6);
+
+    // 11夜め以降は 10夜ごとに一段(だんい)ずつ難しくなる
+    const tier = Math.floor(i / 10);  // 1, 2, 3, ...
+    const step = i % 10;              // その段の中の進み具合 (0〜9)
+    const grow = tier - 1;
+
+    // 盤面は段が上がるごとに縦横こうごに広がる (最大 8x8)
+    let cols = Math.min(6 + Math.ceil(grow / 2), 8);
+    const rows = Math.min(6 + Math.floor(grow / 2), 8);
+    if (step >= 5 && cols < 8) cols++;  // 段の後半はひと回り大きい盤面
+
+    const cells = cols * rows;
+    // 欠けた星(穴)は段が上がるほど増える
+    const holes = Math.min(2 + tier + Math.floor(step / 4), Math.round(cells * 0.18));
+    // 数字星はむしろ減らす = ヒントの間隔が広がって読みが長くなる
+    const numbers = Math.max(4, 6 - Math.floor(grow / 2));
+    // 星のもや(壁)も段ごとに濃くなる
+    const walls = Math.min(6 + tier * 2 + Math.floor(step / 3), 26);
     return [cols, rows, holes, numbers, walls];
   }
 
@@ -255,6 +268,11 @@
     return null;
   }
 
+  function colorOf(key) {
+    const [cx, cy] = key.split(',').map(Number);
+    return (cx + cy) & 1;
+  }
+
   function wallKey(a, b) { return [a, b].sort().join('|'); }
 
   function genPuzzle(cols, rows, holes, numCount, wallCount) {
@@ -265,11 +283,17 @@
       const set = new Set(all);
       const h = attempt > 250 ? Math.max(0, holes - 1) : holes;
       const shuffled = all.slice().sort(() => Math.random() - .5);
-      let removed = 0;
-      for (const key of shuffled) {
-        if (removed >= h) break;
+      // 穴は市松の白黒を同数ずつ抜く。かたよるとハミルトン路が存在しなくなるため
+      const byColor = [[], []];
+      for (const key of shuffled) byColor[colorOf(key)].push(key);
+      const left = [byColor[0].length, byColor[1].length];
+      let removed = 0, guard = all.length * 2;
+      while (removed < h && guard-- > 0) {
+        const c = left[0] >= left[1] ? 0 : 1;
+        const key = byColor[c].length ? byColor[c].pop() : byColor[1 - c].pop();
+        if (key === undefined) break;
         set.delete(key);
-        if (isConnected(set)) removed++;
+        if (isConnected(set)) { removed++; left[colorOf(key)]--; }
         else set.add(key);
       }
       const path = findHamPath(set);
@@ -314,7 +338,9 @@
 
       return { keys: set, numbered, walls, maxNum: n, solution: path };
     }
-    // 保険:蛇行パス
+    // 保険1:穴を減らしてやり直す(穴が多すぎて解が作れなかった場合)
+    if (holes > 0) return genPuzzle(cols, rows, Math.floor(holes / 2), numCount, wallCount);
+    // 保険2:蛇行パス
     const set = new Set(); const path = [];
     for (let cy = 0; cy < rows; cy++) {
       const xs = [...Array(cols).keys()];
