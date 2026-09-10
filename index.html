@@ -135,7 +135,7 @@
 
   .name-bar{
     max-width: 380px;
-    margin: 40px auto 48px;
+    margin: 40px auto 18px;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -173,6 +173,63 @@
     color: var(--ink-faint);
     line-height: 1.6;
   }
+
+  .share-bar{
+    max-width: 380px;
+    margin: 0 auto 48px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 22px;
+    text-align: center;
+  }
+  .share-bar label{
+    display: block;
+    font-size: 12px;
+    color: var(--ink-dim);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .share-bar input{
+    width: 100%;
+    font: inherit;
+    font-size: 20px;
+    text-align: center;
+    color: var(--ink);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    letter-spacing: 0.4em;
+    text-indent: 0.4em;
+  }
+  .share-bar input:focus{
+    outline: none;
+    border-color: var(--accent-soft);
+    box-shadow: 0 0 0 3px rgba(232,163,61,0.18);
+  }
+  .share-bar input::placeholder{ color: var(--ink-faint); letter-spacing: 0.3em; }
+  .share-status{
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    min-height: 1.6em;
+  }
+  .share-status.on{ color: #6ee7a8; }
+  .share-status.bad{ color: #f0a68a; }
+  .share-bar .open-bandai{
+    display: inline-block;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    width: 100%;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    text-decoration: none;
+    letter-spacing: 0.06em;
+  }
+  .share-bar .open-bandai:hover{ color: var(--accent-soft); }
 
   .grid{
     display: grid;
@@ -306,7 +363,7 @@
   <div class="moon-wrap"><div class="moon"></div></div>
   <header>
     <h1>月夜の遊戯場</h1>
-    <p>七つの夜、七つの遊び。灯りをたよりに、好きな一つへ。</p>
+    <p>八つの夜、八つの遊び。灯りをたよりに、好きな一つへ。</p>
     <div class="divider"></div>
   </header>
 
@@ -314,6 +371,13 @@
     <label for="playerName">きょう あそぶ人の名前</label>
     <input type="text" id="playerName" maxlength="14" placeholder="名無しさん" autocomplete="off">
     <div class="hint">この名前でランキングに記録されます。交代するたびに書きかえてね。</div>
+  </div>
+
+  <div class="share-bar">
+    <label for="bandaiCode">みんなの番付に参加する(あいことば)</label>
+    <input type="text" id="bandaiCode" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="0000" autocomplete="off">
+    <div class="share-status" id="shareStatus"></div>
+    <a class="open-bandai" href="bandai.html">この端末を番台にする(あいことばを発行) →</a>
   </div>
 
   <div class="grid">
@@ -358,6 +422,16 @@
       <span class="play">遊びに行く <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </a>
 
+    <a class="card" href="katanuki.html">
+      <div class="card-top">
+        <span class="lantern" aria-hidden="true"></span>
+        <span class="tag" data-genre="festival">縁日</span>
+      </div>
+      <h2>夜店の型抜き</h2>
+      <p>飴の板に彫られた線を、針でそっとなぞって型を抜く。急げば割れ、遅ければ溶ける。</p>
+      <span class="play">遊びに行く <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+
     <a class="card" href="shinkai-no-akari.html">
       <div class="card-top">
         <span class="lantern" aria-hidden="true"></span>
@@ -390,7 +464,7 @@
 
   </div>
 
-  <footer>7 games · game_dashboard</footer>
+  <footer>8 games · game_dashboard</footer>
 </div>
 <script src="ranking.js"></script>
 <script>
@@ -399,19 +473,46 @@
   const cards = Array.from(document.querySelectorAll('.card'));
   const baseHrefs = cards.map(a => a.getAttribute('href'));
 
-  function applyName() {
+  const codeInput = document.getElementById('bandaiCode');
+  const statusEl = document.getElementById('shareStatus');
+
+  // file:// で開いたときにページごとに保存領域が分かれても引き継げるよう、
+  // 名前とあいことばはリンクにも載せておく。
+  function applyLinks() {
     const name = (Ranking.getPlayerName() || '').trim();
+    const code = Ranking.getBandaiCode();
     cards.forEach((a, i) => {
-      a.href = name ? baseHrefs[i] + '?name=' + encodeURIComponent(name) : baseHrefs[i];
+      const q = [];
+      if (name) q.push('name=' + encodeURIComponent(name));
+      if (code) q.push('bandai=' + encodeURIComponent(code));
+      a.href = q.length ? baseHrefs[i] + '?' + q.join('&') : baseHrefs[i];
     });
   }
 
   input.value = Ranking.getPlayerName() || '';
-  applyName();
+  codeInput.value = Ranking.getBandaiCode() || '';
+  applyLinks();
 
   input.addEventListener('input', () => {
     Ranking.setPlayerName(input.value);
-    applyName();
+    applyLinks();
+  });
+
+  codeInput.addEventListener('input', () => {
+    const digits = codeInput.value.replace(/[^0-9]/g, '').slice(0, 4);
+    if (digits !== codeInput.value) codeInput.value = digits;
+    if (digits.length === 4 || digits.length === 0) {
+      Ranking.setBandaiCode(digits);
+      applyLinks();
+    }
+  });
+
+  Ranking.onChange((state, text) => {
+    statusEl.textContent = Ranking.getBandaiCode()
+      ? text
+      : '番台のあいことばを入れると、みんなの記録が並びます。';
+    statusEl.className = 'share-status' +
+      (state === 'open' ? ' on' : (state === 'absent' || state === 'lost' ? ' bad' : ''));
   });
 })();
 </script>

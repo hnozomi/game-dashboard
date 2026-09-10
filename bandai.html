@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番台 — 月夜の遊戯場</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23f6efd9'/%3E%3Ccircle cx='11' cy='12' r='10' fill='%230b0f1c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f1c; --bg-deep:#070a13; --surface:#131a2b; --line:rgba(238,241,251,.09);
+    --ink:#eef1fb; --ink-dim:#97a1bf; --ink-faint:#626c8c;
+    --moon:#f6efd9; --accent:#e8a33d; --accent-soft:#f6c877;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: radial-gradient(ellipse 120% 70% at 50% -10%, #1a2340 0%, var(--bg) 45%, var(--bg-deep) 100%);
+    color: var(--ink);
+    font-family:"Zen Kaku Gothic New","Noto Sans JP",sans-serif;
+    min-height:100vh;
+  }
+  .page{ max-width:1080px; margin:0 auto; padding:36px 20px 60px; }
+
+  header{ text-align:center; margin-bottom:26px; }
+  h1{
+    font-family:"Shippori Mincho",serif; font-weight:800;
+    font-size:clamp(26px,5vw,38px); letter-spacing:.18em; margin:0 0 8px;
+    color:var(--moon);
+  }
+  header p{ margin:0; font-size:12.5px; color:var(--ink-faint); letter-spacing:.08em; }
+
+  .code-card{
+    max-width:520px; margin:0 auto 34px; background:var(--surface);
+    border:1px solid var(--line); border-radius:14px; padding:22px; text-align:center;
+  }
+  .code-label{ font-size:11.5px; color:var(--ink-dim); letter-spacing:.14em; }
+  .code{
+    font-family:"Shippori Mincho",serif; font-weight:800;
+    font-size:clamp(44px,12vw,68px); letter-spacing:.24em; color:var(--accent-soft);
+    margin:6px 0 2px; text-indent:.24em; line-height:1.15;
+  }
+  .code.waiting{ font-size:22px; letter-spacing:.1em; color:var(--ink-faint); text-indent:0; }
+  .share{ font-size:11.5px; color:var(--ink-faint); word-break:break-all; margin-top:8px; line-height:1.7; }
+  .share code{ color:var(--ink-dim); font-size:11px; }
+  .peers{
+    margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--ink-dim); letter-spacing:.06em;
+  }
+  .dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ink-faint); margin-right:7px; vertical-align:middle; }
+  .dot.on{ background:#6ee7a8; box-shadow:0 0 8px rgba(110,231,168,.7); }
+
+  .warn{
+    max-width:520px; margin:0 auto 30px; font-size:11.5px; line-height:1.8;
+    color:var(--ink-faint); text-align:center;
+  }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:18px; }
+  .game{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:16px 16px 14px;
+  }
+  .game h2{
+    font-family:"Shippori Mincho",serif; font-weight:600; font-size:14px;
+    margin:0 0 12px; letter-spacing:.08em; color:var(--moon);
+    display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  }
+  .game h2 span{ font-family:"Zen Kaku Gothic New",sans-serif; font-size:10.5px; color:var(--ink-faint); letter-spacing:.06em; font-weight:400; }
+  ol{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; }
+  li{
+    display:flex; align-items:baseline; gap:9px; font-size:13px;
+    padding:6px 11px; border-radius:8px; background:rgba(255,255,255,.05);
+  }
+  li.fresh{ background:rgba(255,217,138,.18); box-shadow:inset 0 0 0 1px rgba(255,217,138,.45); }
+  .pos{ width:1.4em; font-weight:700; opacity:.6; flex-shrink:0; }
+  li:nth-child(1) .pos{ color:var(--accent-soft); opacity:1; }
+  .val{ font-weight:700; flex-grow:1; font-variant-numeric:tabular-nums; }
+  .who{ font-size:11px; color:var(--ink-dim); flex-shrink:0; max-width:8.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .empty{ font-size:12px; color:var(--ink-faint); padding:8px 0; text-align:center; }
+
+  footer{ margin-top:36px; text-align:center; }
+  .reset{
+    font:inherit; font-size:11.5px; color:var(--ink-faint);
+    background:transparent; border:1px solid var(--line); border-radius:8px;
+    padding:8px 16px; cursor:pointer; letter-spacing:.06em;
+  }
+  .reset:hover{ color:var(--ink-dim); border-color:rgba(238,241,251,.2); }
+  .back{ display:block; margin-top:16px; font-size:11.5px; color:var(--ink-faint); text-decoration:none; letter-spacing:.08em; }
+  .back:hover{ color:var(--ink-dim); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>番 台</h1>
+    <p>この画面をひらいたまま置いておくと、みんなの記録が集まります</p>
+  </header>
+
+  <div class="code-card">
+    <div class="code-label">あいことば</div>
+    <div class="code waiting" id="code">したくしています…</div>
+    <div class="share" id="share"></div>
+    <div class="peers"><span class="dot" id="dot"></span><span id="peerCount">まだ誰もつながっていません</span></div>
+  </div>
+
+  <p class="warn">
+    このページを閉じると番台は閉まります。集まった記録はこの端末に残るので、
+    もう一度ひらけば同じあいことばで再開できます。
+  </p>
+
+  <div class="grid" id="board"></div>
+
+  <footer>
+    <button class="reset" id="resetBtn">集まった記録をぜんぶ消す</button>
+    <a class="back" href="index.html">← 遊戯場にもどる</a>
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+<script>
+(() => {
+  const PEER_PREFIX = 'yorunoyuugijou-bandai-';
+  const BOARD_KEY = 'yorunoyuugijou:bandai:board';
+  const CODE_KEY = 'yorunoyuugijou:bandai:code';
+  const KEEP_PER_GAME = 30;
+  const SHOW_PER_GAME = 5;
+  const FRESH_MS = 20000;   // 直近に届いた記録を光らせる時間
+
+  const GAMES = [
+    { key: 'katanuki',              name: '夜店の型抜き',      unit: '点' },
+    { key: 'kingyo-sukui',          name: '夜店の金魚すくい',  unit: '点' },
+    { key: 'shateki',               name: '夜店の射的',        unit: '点' },
+    { key: 'youkan-tower',          name: 'ようかんタワー',    unit: '段' },
+    { key: 'shinkai-no-akari',      name: '深海ノ灯',          unit: 'm' },
+    { key: 'hoshi-wo-tsunagu-kenja',name: '星をつなぐ賢者の夜', unit: ' 夜' },
+    { key: 'tsukiyo-no-shosai',     name: '月夜の書斎',        unit: '', asc: true, time: true }
+  ];
+  const GAME_BY_KEY = {};
+  GAMES.forEach(g => { GAME_BY_KEY[g.key] = g; });
+
+  const $ = id => document.getElementById(id);
+
+  // ---- 記録の保管 ----
+  function loadBoard() {
+    try { return JSON.parse(localStorage.getItem(BOARD_KEY)) || []; } catch (e) { return []; }
+  }
+  function saveBoard(scores) {
+    try { localStorage.setItem(BOARD_KEY, JSON.stringify(scores)); } catch (e) {}
+  }
+
+  let board = loadBoard();
+
+  function comparatorFor(gameKey) {
+    const asc = !!(GAME_BY_KEY[gameKey] && GAME_BY_KEY[gameKey].asc);
+    return (a, b) => (a.value !== b.value)
+      ? (asc ? a.value - b.value : b.value - a.value)
+      : (a.date || 0) - (b.date || 0);
+  }
+
+  // 同じ記録を二重に入れず、ゲームごとに上位だけ残す
+  function normalize(scores) {
+    const seen = new Set(), byGame = {};
+    for (const e of scores) {
+      if (!e || typeof e.value !== 'number' || !e.game) continue;
+      const id = e.id || (e.name + '|' + e.value + '|' + e.date);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      (byGame[e.game] = byGame[e.game] || []).push(e);
+    }
+    let out = [];
+    for (const g of Object.keys(byGame)) {
+      byGame[g].sort(comparatorFor(g));
+      out = out.concat(byGame[g].slice(0, KEEP_PER_GAME));
+    }
+    return out;
+  }
+
+  function formatValue(g, v) {
+    if (g.time) {
+      const sec = Math.max(0, Math.round(v)), m = Math.floor(sec / 60), s = sec % 60;
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    return v + (g.unit || '');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---- 描画 ----
+  function renderBoard() {
+    const now = Date.now();
+    $('board').innerHTML = GAMES.map(g => {
+      const rows = board
+        .filter(e => e.game === g.key)
+        .sort(comparatorFor(g.key))
+        .slice(0, SHOW_PER_GAME);
+      const total = board.filter(e => e.game === g.key).length;
+      const body = rows.length
+        ? '<ol>' + rows.map((e, i) =>
+            '<li' + (now - (e.receivedAt || 0) < FRESH_MS ? ' class="fresh"' : '') + '>' +
+              '<span class="pos">' + (i + 1) + '</span>' +
+              '<span class="val">' + escapeHtml(formatValue(g, e.value)) + '</span>' +
+              '<span class="who">' + escapeHtml(e.name || '名無しさん') + '</span>' +
+            '</li>').join('') + '</ol>'
+        : '<div class="empty">まだ記録がありません</div>';
+      return '<div class="game"><h2>' + escapeHtml(g.name) +
+        (total ? '<span>' + total + '件</span>' : '') + '</h2>' + body + '</div>';
+    }).join('');
+  }
+
+  function renderPeers() {
+    const n = conns.filter(c => c.open).length;
+    $('dot').className = 'dot' + (n > 0 ? ' on' : '');
+    $('peerCount').textContent = n > 0
+      ? n + '台がつながっています'
+      : 'まだ誰もつながっていません';
+  }
+
+  // ---- 通信(番台=ホスト) ----
+  let peer = null;
+  let conns = [];
+  let roomCode = null;
+
+  function broadcast() {
+    const msg = { type: 'board', scores: board };
+    conns.forEach(c => { if (c.open) { try { c.send(msg); } catch (e) {} } });
+  }
+
+  function onSubmit(scores) {
+    if (!Array.isArray(scores) || !scores.length) return;
+    const now = Date.now();
+    const incoming = scores.map(e => Object.assign({}, e, { receivedAt: now }));
+    board = normalize(incoming.concat(board));
+    saveBoard(board);
+    renderBoard();
+  }
+
+  function setupConn(c) {
+    conns.push(c);
+    c.on('open', () => {
+      renderPeers();
+      try { c.send({ type: 'board', scores: board }); } catch (e) {}
+    });
+    c.on('data', msg => {
+      if (!msg || msg.type !== 'submit') return;
+      onSubmit(msg.scores);
+      broadcast();   // 送ってきた本人をふくめ、つながっている全員に配る
+    });
+    const drop = () => {
+      conns = conns.filter(x => x !== c);
+      renderPeers();
+    };
+    c.on('close', drop);
+    c.on('error', drop);
+  }
+
+  function openBandai(preferred, attempt) {
+    attempt = attempt || 0;
+    if (attempt >= 8) {
+      $('code').textContent = 'ひらけませんでした。再読み込みしてください';
+      return;
+    }
+    const code = (attempt === 0 && preferred) ? preferred : String(Math.floor(1000 + Math.random() * 9000));
+    const p = new Peer(PEER_PREFIX + code);
+    peer = p;
+
+    p.on('open', () => {
+      roomCode = code;
+      try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
+      $('code').textContent = code;
+      $('code').classList.remove('waiting');
+      const url = new URL('index.html?bandai=' + code, location.href).href;
+      $('share').innerHTML = 'あそぶ人は、この数字をダッシュボードの「あいことば」に入れてください。<br>' +
+        'このリンクを送ってもOK: <code>' + escapeHtml(url) + '</code>';
+    });
+
+    p.on('connection', setupConn);
+
+    p.on('error', err => {
+      if (err && err.type === 'unavailable-id') {
+        // その番号は誰かが使っている。別の番号でやり直す
+        try { p.destroy(); } catch (e) {}
+        openBandai(null, attempt + 1);
+      } else if (!roomCode) {
+        $('code').textContent = 'ひらけませんでした(' + (err && err.type) + ')';
+      }
+    });
+
+    p.on('disconnected', () => { try { p.reconnect(); } catch (e) {} });
+  }
+
+  // ---- 起動 ----
+  if (typeof Peer !== 'function' || typeof RTCPeerConnection !== 'function') {
+    $('code').textContent = 'この環境では番台をひらけません';
+  } else {
+    let saved = null;
+    try { saved = localStorage.getItem(CODE_KEY); } catch (e) {}
+    openBandai(saved && /^\d{4}$/.test(saved) ? saved : null);
+  }
+
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('集まった記録をぜんぶ消します。よろしいですか?')) return;
+    board = [];
+    saveBoard(board);
+    renderBoard();
+    broadcast();
+  });
+
+  renderBoard();
+  renderPeers();
+  setInterval(renderBoard, 5000);   // 「届いたばかり」の光をさます
+})();
+</script>
+</body>
+</html>
